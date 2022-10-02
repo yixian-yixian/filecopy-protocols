@@ -11,6 +11,17 @@
 //              a convenient wrapper for sending and receiving
 //              UDP packets in a client/server model
 //
+//            * The C150NastyDgmSocket class, which is a variant
+//              of the socket class described above. The nasty version
+//              takes an integer on its constructor, selecting a degree
+//              of nastiness. Any nastiness > 0 tells the system
+//              to occasionally drop, delay, reorder, duplicate or
+//              damage incoming packets. Higher nastiness levels tend
+//              to be more aggressive about causing trouble
+//
+//            * The C150NastyFile class, which provides a convenient
+//              wrapper for causing operations to occasionally misbehave.
+//
 //            * The c150debug interface, which provides a framework for
 //              generating a timestamped log of debugging messages.
 //              Note that the socket classes described above will
@@ -27,7 +38,7 @@
 //
 //        OPERATION
 //
-//              pingclient will send a single UDP packet
+//              fileclient will send a single UDP packet
 //              to the named server, and will wait (forever)
 //              for a single UDP packet response. The contents
 //              of the packet sent will be the msgtxt, including
@@ -57,4 +68,17 @@
 //       Copyright: Ivian Zhang and Jack Zhang
 //
 // --------------------------------------------------------------
+
+
+#include "c150nastydgmsocket.h"
+#include "c150nastyfile.h"
+#include "c150debug.h"
+#include <fstream>
+
+using namespace std;          // for C++ std library
+using namespace C150NETWORK;  // for all the comp150 utilities
+
+
+
+
 
