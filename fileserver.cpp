@@ -84,8 +84,8 @@ main(int argc, char *argv[])
     nastiness = atoi(argv[1]);   // convert command line string to integer
 
     // TODO update server debug message 
-    setUpDebugLogging("fileserverdebug.txt",argc, argv);
-    c150debug->setIndent("    ");
+    // setUpDebugLogging("fileserverdebug.txt",argc, argv);
+    // c150debug->setIndent("    ");
 
     // Set up socket for listening mode 
     try {
@@ -117,7 +117,7 @@ main(int argc, char *argv[])
             // create the return message 
             bool found = false;
             string response = "You requested: " + incoming;
-            string fileLocate = "The directory is" + (found ? " ": " not") + " found locally \n".
+            string fileLocate = "The directory is" + (char *)(found ? " ": " not") + " found locally \n".
 
 
 
@@ -143,6 +143,7 @@ main(int argc, char *argv[])
 
 uint64_t calculateStringsha1(string message)
 {
+    return 0;
 
 }
 

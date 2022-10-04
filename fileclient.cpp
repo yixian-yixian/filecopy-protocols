@@ -78,6 +78,11 @@
 using namespace std;          // for C++ std library
 using namespace C150NETWORK;  // for all the comp150 utilities
 
+// forward declarations
+void checkAndPrintMessage(ssize_t readlen, char *buf, ssize_t bufferlen);
+void setUpDebugLogging(const char *logname, int argc, char *argv[]);
+
+
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //
 //                    Command line arguments

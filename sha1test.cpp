@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
 
   for (j = 1; j < argc; ++j) {
 		printf ("SHA1 (\"%s\") = ", argv[j]);
-		t = new ifstream(argv[j]);
+		t = new ifstream(argv[j]); // set up stream connection with file 
 		buffer = new stringstream;
 		*buffer << t->rdbuf();
 		SHA1((const unsigned char *)buffer->str().c_str(), 
