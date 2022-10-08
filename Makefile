@@ -4,7 +4,7 @@
 #
 # The targets below are for samples that may be helpful, but:
 #
-#   YOUR MAIN JOB IN THIS ASSIGNMENT IS TO CREATE TWO 
+#   YOUR MAIN JOB IN THIS ASSIGNMENT IS TO CREATE TWO
 #   NEW PROGRAMS: fileclient and fileserver
 #
 #   YOU WILL MODIFY THIS MAKEFILE TO BUILD THEM TOO
@@ -12,7 +12,7 @@
 # Useful sample program targets:
 #
 #
-#    nastyfiletest - demonstrates the c150nastyfile class that you 
+#    nastyfiletest - demonstrates the c150nastyfile class that you
 #                    MUST use to read and write your files
 #
 #    sha1test -   sample code for computing SHA1 hash
@@ -40,22 +40,22 @@ CPPFLAGS = -g -Wall -Werror -I$(C150LIB)
 C150LIB = $(COMP117)/files/c150Utils/
 C150AR = $(C150LIB)c150ids.a
 
-LDFLAGS = 
+LDFLAGS =
 INCLUDES = $(C150LIB)c150dgmsocket.h $(C150LIB)c150nastydgmsocket.h $(C150LIB)c150network.h $(C150LIB)c150exceptions.h $(C150LIB)c150debug.h $(C150LIB)c150utility.h
 
 all: nastyfiletest makedatafile sha1test fileclient fileserver
 
-# 
+#
 # Build the fileserver
-# 
-fileserver: fileserver.cpp $(C150AR) $(INCLUDES)
-	$(CPP) -o fileserver $(CPPFLAGS) fileserver.cpp $(C150AR)
-	
+#
+fileserver: fileserver.cpp endtoend.cpp $(C150AR) $(INCLUDES)
+	$(CPP) -o fileserver $(CPPFLAGS) endtoend.cpp fileserver.cpp  $(C150AR)
+
 #
 # Build the fileclient
 #
 fileclient: fileclient.cpp $(C150AR) $(INCLUDES)
-	$(CPP) -o fileserver $(CPPFLAGS) fileclient.cpp $(C150AR)
+	$(CPP) -o fileclient $(CPPFLAGS) endtoend.cpp fileclient.cpp $(C150AR) -lssl -lcrypto
 
 #
 # Build the nastyfiletest sample
@@ -70,16 +70,16 @@ sha1test: sha1test.cpp
 	$(CPP) -o sha1test sha1test.cpp -lssl -lcrypto
 
 #
-# Build the makedatafile 
+# Build the makedatafile
 #
 makedatafile: makedatafile.cpp
-	$(CPP) -o makedatafile makedatafile.cpp 
+	$(CPP) -o makedatafile makedatafile.cpp
 
 #
 # To get any .o, compile the corresponding .cpp
 #
 %.o:%.cpp  $(INCLUDES)
-	$(CPP) -c  $(CPPFLAGS) $< 
+	$(CPP) -c  $(CPPFLAGS) $<
 
 
 #
@@ -88,5 +88,4 @@ makedatafile: makedatafile.cpp
 
 clean:
 	 rm -f nastyfiletest sha1test makedatafile *.o fileserver fileclient core.* vgcore.*
-
 

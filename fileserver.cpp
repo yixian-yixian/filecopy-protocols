@@ -30,7 +30,7 @@
 //
 //        COMMAND LINE
 //
-//              pingserver <nastiness_number>
+//              fileserver <networknastiness> <filenastiness> <targetdir>
 //
 //
 //        OPERATION
@@ -53,6 +53,8 @@
 
 #include "c150nastydgmsocket.h"
 #include "c150debug.h"
+#include "c150nastyfile.h"
+#include "endtoend.h"
 #include <fstream>
 #include <cstdlib> 
 #include <cstdint>
@@ -69,19 +71,25 @@ main(int argc, char *argv[])
     // Variable Declaration  
     ssize_t readlen;             // amount of data read from socket
     char incomingMessage[MAX_REQUEST_BUF];   // received message data
-    int nastiness;               // how aggressively do we drop packets, etc?
+    int filenastiness, networknastiness;               // how aggressively do we drop packets, etc?
 
     // Check command line argument 
-    if (argc != 2)  {
-        fprintf(stderr,"Correct syntxt is: %s <nastiness_number>\n", argv[0]);
+    if (argc != 4)  {
+        fprintf(stderr,"Correct syntxt is: %s <networknastiness> <filenastiness> <targetdir>\n", argv[0]);
         exit(1);
     }
     if (strspn(argv[1], "0123456789") != strlen(argv[1])) {
-        fprintf(stderr,"Nastiness %s is not numeric\n", argv[1]);     
-        fprintf(stderr,"Correct syntxt is: %s <nastiness_number>\n", argv[0]);     
+        fprintf(stderr,"Network Nastiness %s is not numeric\n", argv[1]);     
+        fprintf(stderr,"Correct syntxt is: %s <networknastiness> <filenastiness> <targetdir>\n", argv[0]);     
+        exit(4);
+    } else if (strspn(argv[2], "0123456789") != strlen(argv[2])) {
+        fprintf(stderr,"File Nastiness %s is not numeric\n", argv[2]);     
+        fprintf(stderr,"Correct syntxt is: %s <networknastiness> <filenastiness> <targetdir>\n", argv[0]);     
         exit(4);
     }
-    nastiness = atoi(argv[1]);   // convert command line string to integer
+    filenastiness = atoi(argv[1]);   // convert command line string to integer
+    networknastiness = atoi(argv[2]);
+    printf("current filenastiness %d\n", filenastiness);
 
     // TODO update server debug message 
     // setUpDebugLogging("fileserverdebug.txt",argc, argv);
@@ -91,8 +99,8 @@ main(int argc, char *argv[])
     try {
         // Create the socket 
         c150debug->printf(C150APPLICATION,"Creating C150NastyDgmSocket(nastiness=%d)",
-                          nastiness);
-        C150DgmSocket *sock = new C150NastyDgmSocket(nastiness);
+                          networknastiness);
+        C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
         c150debug->printf(C150APPLICATION,"Ready to accept messages");
 
         // infinite loop processing message 
@@ -101,7 +109,11 @@ main(int argc, char *argv[])
             if (readlen == 0) {
                 c150debug->printf(C150APPLICATION,"Read zero length message, trying again");
                 continue;
+            } else if (readlen < 0){
+                c150debug->printf(C150APPLICATION,"Corrupted read from socket, disconneting");
+                break;
             }
+
             //
             // Clean up the message in case it contained junk
             //
@@ -113,11 +125,15 @@ main(int argc, char *argv[])
                                               // non-printing characters to .
             c150debug->printf(C150APPLICATION,"Successfully read %d bytes. Message=\"%s\"",
                               readlen, incoming.c_str());
-
+                              string response = "You requested: " + incoming;
             // create the return message 
-            bool found = false;
-            string response = "You requested: " + incoming;
-            string fileLocate = "The directory is" + (char *)(found ? " ": " not") + " found locally \n".
+            // bool found = false;
+            
+
+
+
+
+            
 
 
 
@@ -141,10 +157,5 @@ main(int argc, char *argv[])
 
 }
 
-uint64_t calculateStringsha1(string message)
-{
-    return 0;
-
-}
 
 

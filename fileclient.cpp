@@ -73,7 +73,7 @@
 #include "c150nastydgmsocket.h"
 #include "c150nastyfile.h"
 #include "c150debug.h"
-#include <fstream>
+#include "endtoend.h"
 
 using namespace std;          // for C++ std library
 using namespace C150NETWORK;  // for all the comp150 utilities
@@ -81,7 +81,6 @@ using namespace C150NETWORK;  // for all the comp150 utilities
 // forward declarations
 void checkAndPrintMessage(ssize_t readlen, char *buf, ssize_t bufferlen);
 void setUpDebugLogging(const char *logname, int argc, char *argv[]);
-
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //
@@ -104,15 +103,14 @@ const int srcdirArg = 4;           // source directory is 4nd arg
 //
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-int
-main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 
     //
     // Variable declarations
     //
-    ssize_t readlen;             // amount of data read from socket
-    char incomingMessage[512];   // received message data
-    int nastiness;               // how aggressively do we drop packets, etc?
+    // ssize_t readlen;             // amount of data read from socket
+    // char incomingMessage[512];   // received message data
+    // int nastiness;               // how aggressively do we drop packets, etc?
 
     //
     //  Set up debug message logging
@@ -136,45 +134,49 @@ main(int argc, char *argv[]) {
         fprintf(stderr,"Correct syntxt is: %s <server> <networknastiness> <filenastiness> <srcdir>\n", argv[0]);     
         exit(4);
     }
-    nastiness = atoi(argv[2]);
+    // nastiness = atoi(argv[2]);
+    string tardir = argv[4];
+    vector<fileProp> allFilesProp;
+    FileCopyE2ECheck(tardir, allFilesProp);
+    printf("finished with FileCopyE2E\n");
     //
     //
     //        Send / receive / print
     //
-    try {
+    // try {
 
-        // Create the socket
-        c150debug->printf(C150APPLICATION,"Creating C150NastyDgmSocket(nastiness=%d)", nastiness);
-        C150DgmSocket *sock = new C150NastyDgmSocket(nastiness);
+    //     // Create the socket
+    //     c150debug->printf(C150APPLICATION,"Creating C150NastyDgmSocket(nastiness=%d)", nastiness);
+    //     C150DgmSocket *sock = new C150NastyDgmSocket(nastiness);
 
-        // Tell the DGMSocket which server to talk to
-        sock -> setServerName(argv[serverArg]);
+    //     // Tell the DGMSocket which server to talk to
+    //     sock -> setServerName(argv[serverArg]);
 
-        // Send the message to the server
-        c150debug->printf(C150APPLICATION,"%s: Reading from source directory: \"%s\"",
-                          argv[0], argv[srcdirArg]);
-        sock -> write(argv[srcdirArg], strlen(argv[srcdirArg])+1); // +1 includes the null
-        // Read the response from the server
-        c150debug->printf(C150APPLICATION,"%s: Returned from write, doing read()",
-                          argv[0]);
-        readlen = sock -> read(incomingMessage, sizeof(incomingMessage));
+    //     // Send the message to the server
+    //     c150debug->printf(C150APPLICATION,"%s: Reading from source directory: \"%s\"",
+    //                       argv[0], argv[srcdirArg]);
+    //     sock -> write(argv[srcdirArg], strlen(argv[srcdirArg])+1); // +1 includes the null
+    //     // Read the response from the server
+    //     c150debug->printf(C150APPLICATION,"%s: Returned from write, doing read()",
+    //                       argv[0]);
+    //     readlen = sock -> read(incomingMessage, sizeof(incomingMessage));
 
-        // Check and print the incoming message
-        checkAndPrintMessage(readlen, incomingMessage, sizeof(incomingMessage));
+    //     // Check and print the incoming message
+    //     checkAndPrintMessage(readlen, incomingMessage, sizeof(incomingMessage));
 
-    }
+    // }
 
-    //
-    //  Handle networking errors -- for now, just print message and give up!
-    //
-    catch (C150NetworkException& e) {
-        // Write to debug log
-        c150debug->printf(C150ALWAYSLOG,"Caught C150NetworkException: %s\n",
-                          e.formattedExplanation().c_str());
-        // In case we're logging to a file, write to the console too
-        cerr << argv[0] << ": caught C150NetworkException: " << e.formattedExplanation()\
-                        << endl;
-    }
+    // //
+    // //  Handle networking errors -- for now, just print message and give up!
+    // //
+    // catch (C150NetworkException& e) {
+    //     // Write to debug log
+    //     c150debug->printf(C150ALWAYSLOG,"Caught C150NetworkException: %s\n",
+    //                       e.formattedExplanation().c_str());
+    //     // In case we're logging to a file, write to the console too
+    //     cerr << argv[0] << ": caught C150NetworkException: " << e.formattedExplanation()
+    //                     << endl;
+    // }
 
     return 0;
 }
