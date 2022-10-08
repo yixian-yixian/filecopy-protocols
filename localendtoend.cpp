@@ -1,4 +1,4 @@
-#include "endtoend.h"
+#include "localendtoend.h"
 #include <cassert>
 
 #define BUFSIZE 1024
@@ -27,17 +27,16 @@ void GetFileNames(vector<string>& filenames, string tardir)
  * return: total number of bytes read from the file object
  * notes: *buf_ptr is udpated to point to the read in file content       
  */
-size_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_ptr)
+ssize_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_ptr)
 {
-    printf("currently in readafile\n");
     assert(targetFile != nullptr);
-    size_t totalBytes = 0;
+    ssize_t totalBytes = 0;
     vector<unsigned char> allFileContent;
     unsigned char* temporaryBuf = (unsigned char*)malloc(BUFSIZE * sizeof(unsigned char));
-    size_t chunk = (*targetFile).fread(temporaryBuf, 1, BUFSIZE);
+    ssize_t chunk = (*targetFile).fread(temporaryBuf, 1, BUFSIZE);
     totalBytes += chunk;
     while(1) { // read until the end
-        for (size_t t = 0; t <= chunk; t += sizeof(unsigned char)){
+        for (ssize_t t = 0; t <= chunk; t += sizeof(unsigned char)){
             allFileContent.push_back(*(temporaryBuf + t));
         }
         bzero(temporaryBuf, BUFSIZE); // clean up the buf for next read 
@@ -62,20 +61,20 @@ size_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_ptr
  * return: total number of bytes read from the file object
  * notes: *buf_ptr is udpated to point to the read in file content       
  */
-void FileCopyE2ECheck(string tardir, vector<fileProp>& allFilesProp_addr)
+void FileCopyE2ECheck(int filenastiness, string tardir, vector<fileProp>& allFilesProp_addr)
 {
     printf("currently in FileCopyE2ECheck\n\n");
     unsigned char* temporaryBuf = nullptr;
     unordered_map<unsigned char*, unsigned char*> umSha1content; // key rethink
     int iteration = 0;
-    size_t readedBytes = 0;
+    ssize_t readedBytes = 0;
     vector<string> filenames;
     GetFileNames(filenames, tardir);
     
     for (long unsigned int i = 0; i < filenames.size(); i++){ // read one file 
         while (iteration < UPPERBOUND)
         {
-            C150NETWORK::C150NastyFile C150NF = C150NETWORK::C150NastyFile(4);
+            C150NETWORK::C150NastyFile C150NF = C150NETWORK::C150NastyFile(filenastiness);
             printf("current filename %s \n", filenames[i].c_str());
             void *success = C150NF.fopen(filenames[i].c_str(), "r");
             assert(success != NULL);

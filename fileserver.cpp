@@ -54,7 +54,8 @@
 #include "c150nastydgmsocket.h"
 #include "c150debug.h"
 #include "c150nastyfile.h"
-#include "endtoend.h"
+#include "networkendtoend.h"
+#include "c150grading.h"
 #include <fstream>
 #include <cstdlib> 
 #include <cstdint>
@@ -128,14 +129,7 @@ main(int argc, char *argv[])
                               string response = "You requested: " + incoming;
             // create the return message 
             // bool found = false;
-            
-
-
-
-
-            
-
-
+        
 
             // write the return message
             //

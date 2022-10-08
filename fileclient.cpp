@@ -73,7 +73,9 @@
 #include "c150nastydgmsocket.h"
 #include "c150nastyfile.h"
 #include "c150debug.h"
-#include "endtoend.h"
+#include "c150grading.h"
+#include "localendtoend.h"
+#include "networkendtoend.h"
 
 using namespace std;          // for C++ std library
 using namespace C150NETWORK;  // for all the comp150 utilities
@@ -104,13 +106,17 @@ const int srcdirArg = 4;           // source directory is 4nd arg
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 int main(int argc, char *argv[]) {
-
+    // 
+    // Grading command 
+    // 
+    GRADEME(argc, argv);
+    *GRADING << "The sum of 100 + 20 + 3 is: " << 100+20+3 << endl;
     //
     // Variable declarations
     //
     // ssize_t readlen;             // amount of data read from socket
-    // char incomingMessage[512];   // received message data
-    // int nastiness;               // how aggressively do we drop packets, etc?
+    int filenastiness;               // how aggressively do we drop packets, etc?
+    // int networknastiness;
 
     //
     //  Set up debug message logging
@@ -124,21 +130,30 @@ int main(int argc, char *argv[]) {
         fprintf(stderr,"Correct syntxt is: %s <server> <networknastiness> <filenastiness> <srcdir>\n", argv[0]);
         exit(1);
     }
-    if (strspn(argv[2], "0123456789") != strlen(argv[2])) {
+    if (strspn(argv[2], "0123456789") != strlen(argv[netnastyArg])) {
         fprintf(stderr,"Network nastiness %s is not numeric\n", argv[2]);     
         fprintf(stderr,"Correct syntxt is: %s <server> <networknastiness> <filenastiness> <srcdir>\n", argv[0]);     
         exit(4);
     }
-    if (strspn(argv[3], "0123456789") != strlen(argv[3])) {
+    if (strspn(argv[3], "0123456789") != strlen(argv[filenastyArg])) {
         fprintf(stderr,"File Nastiness %s is not numeric\n", argv[3]);     
         fprintf(stderr,"Correct syntxt is: %s <server> <networknastiness> <filenastiness> <srcdir>\n", argv[0]);     
         exit(4);
     }
-    // nastiness = atoi(argv[2]);
+    filenastiness = atoi(argv[filenastyArg]);
+    // networknastiness = atoi(argv[netnastyArg]);
     string tardir = argv[4];
     vector<fileProp> allFilesProp;
-    FileCopyE2ECheck(tardir, allFilesProp);
+    FileCopyE2ECheck(filenastiness, tardir, allFilesProp);
     printf("finished with FileCopyE2E\n");
+    // C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
+    printf("starting FileSendE2ECheck\n");
+    // FileSendE2ECheck(*sock, allFilesProp);
+    for (long unsigned int i = 0; i < allFilesProp.size(); i++){
+        unsigned char* protocolbuf;
+        formatRequestBuf(allFilesProp.at(i), &protocolbuf);
+    }
+    printf("finished with FileSendE2ECheck\n");
     //
     //
     //        Send / receive / print
@@ -146,12 +161,13 @@ int main(int argc, char *argv[]) {
     // try {
 
     //     // Create the socket
-    //     c150debug->printf(C150APPLICATION,"Creating C150NastyDgmSocket(nastiness=%d)", nastiness);
-    //     C150DgmSocket *sock = new C150NastyDgmSocket(nastiness);
+    //     c150debug->printf(C150APPLICATION,"Creating C150NastyDgmSocket(nastiness=%d)", networknastiness);
+    //     C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
 
     //     // Tell the DGMSocket which server to talk to
     //     sock -> setServerName(argv[serverArg]);
-
+    //     // FileSendE2ECheck(sock, allFilesProp);
+        
     //     // Send the message to the server
     //     c150debug->printf(C150APPLICATION,"%s: Reading from source directory: \"%s\"",
     //                       argv[0], argv[srcdirArg]);
