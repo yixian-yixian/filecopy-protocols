@@ -116,7 +116,7 @@ int main(int argc, char *argv[]) {
     //
     // ssize_t readlen;             // amount of data read from socket
     int filenastiness;               // how aggressively do we drop packets, etc?
-    // int networknastiness;
+    int networknastiness;
 
     //
     //  Set up debug message logging
@@ -130,69 +130,68 @@ int main(int argc, char *argv[]) {
         fprintf(stderr,"Correct syntxt is: %s <server> <networknastiness> <filenastiness> <srcdir>\n", argv[0]);
         exit(1);
     }
-    if (strspn(argv[2], "0123456789") != strlen(argv[netnastyArg])) {
+    if (strspn(argv[netnastyArg], "0123456789") != strlen(argv[netnastyArg])) {
         fprintf(stderr,"Network nastiness %s is not numeric\n", argv[2]);     
         fprintf(stderr,"Correct syntxt is: %s <server> <networknastiness> <filenastiness> <srcdir>\n", argv[0]);     
         exit(4);
     }
-    if (strspn(argv[3], "0123456789") != strlen(argv[filenastyArg])) {
+    if (strspn(argv[filenastyArg], "0123456789") != strlen(argv[filenastyArg])) {
         fprintf(stderr,"File Nastiness %s is not numeric\n", argv[3]);     
         fprintf(stderr,"Correct syntxt is: %s <server> <networknastiness> <filenastiness> <srcdir>\n", argv[0]);     
         exit(4);
     }
     filenastiness = atoi(argv[filenastyArg]);
-    // networknastiness = atoi(argv[netnastyArg]);
+    networknastiness = atoi(argv[netnastyArg]);
     string tardir = argv[4];
     vector<fileProp> allFilesProp;
     FileCopyE2ECheck(filenastiness, tardir, allFilesProp);
     printf("finished with FileCopyE2E\n");
-    // C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
+
+
     printf("starting FileSendE2ECheck\n");
     // FileSendE2ECheck(*sock, allFilesProp);
-    for (long unsigned int i = 0; i < allFilesProp.size(); i++){
-        unsigned char* protocolbuf;
-        formatRequestBuf(allFilesProp.at(i), &protocolbuf);
+    // for (long unsigned int i = 0; i < allFilesProp.size(); i++){
+    //     unsigned char* protocolbuf;
+    //     formatRequestBuf(allFilesProp.at(i), &protocolbuf);
+    // }    
+    
+    //      Send / receive / print
+    
+    try {
+
+        // Create the socket
+        c150debug->printf(C150APPLICATION,"Creating C150NastyDgmSocket(nastiness=%d)", networknastiness);
+        C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
+
+        // Tell the DGMSocket which server to talk to
+        sock -> setServerName(argv[serverArg]);
+        FileSendE2ECheck(*sock, allFilesProp);
+        
+        // // Send the message to the server
+        // c150debug->printf(C150APPLICATION,"%s: Reading from source directory: \"%s\"",
+        //                   argv[0], argv[srcdirArg]);
+        // // Read the response from the server
+        // c150debug->printf(C150APPLICATION,"%s: Returned from write, doing read()",
+        //                   argv[0]);
+
+        // // Check and print the incoming message
+        // checkAndPrintMessage(readlen, incomingMessage, sizeof(incomingMessage));
+
+    }
+
+    //
+    //  Handle networking errors -- for now, just print message and give up!
+    //
+    catch (C150NetworkException& e) {
+        // Write to debug log
+        c150debug->printf(C150ALWAYSLOG,"Caught C150NetworkException: %s\n",
+                          e.formattedExplanation().c_str());
+        // In case we're logging to a file, write to the console too
+        cerr << argv[0] << ": caught C150NetworkException: " << e.formattedExplanation()
+                        << endl;
     }
     printf("finished with FileSendE2ECheck\n");
-    //
-    //
-    //        Send / receive / print
-    //
-    // try {
 
-    //     // Create the socket
-    //     c150debug->printf(C150APPLICATION,"Creating C150NastyDgmSocket(nastiness=%d)", networknastiness);
-    //     C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
-
-    //     // Tell the DGMSocket which server to talk to
-    //     sock -> setServerName(argv[serverArg]);
-    //     // FileSendE2ECheck(sock, allFilesProp);
-        
-    //     // Send the message to the server
-    //     c150debug->printf(C150APPLICATION,"%s: Reading from source directory: \"%s\"",
-    //                       argv[0], argv[srcdirArg]);
-    //     sock -> write(argv[srcdirArg], strlen(argv[srcdirArg])+1); // +1 includes the null
-    //     // Read the response from the server
-    //     c150debug->printf(C150APPLICATION,"%s: Returned from write, doing read()",
-    //                       argv[0]);
-    //     readlen = sock -> read(incomingMessage, sizeof(incomingMessage));
-
-    //     // Check and print the incoming message
-    //     checkAndPrintMessage(readlen, incomingMessage, sizeof(incomingMessage));
-
-    // }
-
-    // //
-    // //  Handle networking errors -- for now, just print message and give up!
-    // //
-    // catch (C150NetworkException& e) {
-    //     // Write to debug log
-    //     c150debug->printf(C150ALWAYSLOG,"Caught C150NetworkException: %s\n",
-    //                       e.formattedExplanation().c_str());
-    //     // In case we're logging to a file, write to the console too
-    //     cerr << argv[0] << ": caught C150NetworkException: " << e.formattedExplanation()
-    //                     << endl;
-    // }
 
     return 0;
 }

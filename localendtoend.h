@@ -24,6 +24,8 @@
 #include <vector>
 #include <unordered_map>
 #include <dirent.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 typedef struct fileProp{
     string filename;

@@ -68,10 +68,6 @@ using namespace C150NETWORK;  // for all the comp150 utilities
 int
 main(int argc, char *argv[])
 {
-
-    // Variable Declaration  
-    ssize_t readlen;             // amount of data read from socket
-    char incomingMessage[MAX_REQUEST_BUF];   // received message data
     int filenastiness, networknastiness;               // how aggressively do we drop packets, etc?
 
     // Check command line argument 
@@ -106,36 +102,8 @@ main(int argc, char *argv[])
 
         // infinite loop processing message 
         while (1) {
-            readlen = sock -> read(incomingMessage, sizeof(incomingMessage)-1);
-            if (readlen == 0) {
-                c150debug->printf(C150APPLICATION,"Read zero length message, trying again");
-                continue;
-            } else if (readlen < 0){
-                c150debug->printf(C150APPLICATION,"Corrupted read from socket, disconneting");
-                break;
-            }
-
-            //
-            // Clean up the message in case it contained junk
-            //
-            incomingMessage[readlen] = '\0';  // make sure null terminated
-            string incoming(incomingMessage); // Convert to C++ string ...it's slightly
-                                              // easier to work with, and cleanString
-                                              // expects it
-            cleanString(incoming);            // c150ids-supplied utility: changes
-                                              // non-printing characters to .
-            c150debug->printf(C150APPLICATION,"Successfully read %d bytes. Message=\"%s\"",
-                              readlen, incoming.c_str());
-                              string response = "You requested: " + incoming;
-            // create the return message 
-            // bool found = false;
-        
-
-            // write the return message
-            //
-            c150debug->printf(C150APPLICATION,"Responding with message=\"%s\"",
-                              response.c_str());
-            sock -> write(response.c_str(), response.length()+1);
+            printf("curretn inside infinite loop processing message\n");
+            FileReceiveE2ECheck(*sock);
 
         }
 

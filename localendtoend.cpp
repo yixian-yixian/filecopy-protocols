@@ -33,25 +33,33 @@ ssize_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_pt
     ssize_t totalBytes = 0;
     vector<unsigned char> allFileContent;
     unsigned char* temporaryBuf = (unsigned char*)malloc(BUFSIZE * sizeof(unsigned char));
-    ssize_t chunk = (*targetFile).fread(temporaryBuf, 1, BUFSIZE);
-    totalBytes += chunk;
-    while(1) { // read until the end
-        for (ssize_t t = 0; t <= chunk; t += sizeof(unsigned char)){
+    ssize_t chunk = 0;
+    // = (*targetFile).fread(temporaryBuf, 1, BUFSIZE);
+    // totalBytes += chunk;
+    while(!(*targetFile).feof()) { // read until the end
+        chunk = (*targetFile).fread(temporaryBuf, 1, BUFSIZE);
+        for (ssize_t t = 0; t < chunk; t += sizeof(unsigned char)){
             allFileContent.push_back(*(temporaryBuf + t));
         }
         bzero(temporaryBuf, BUFSIZE); // clean up the buf for next read 
-        if (chunk <= BUFSIZE) break;
-        chunk = (*targetFile).fread(temporaryBuf, 1, BUFSIZE);
-        if ((*targetFile).feof() == 0) break;
         totalBytes += chunk;
     }
     unsigned char* prod = (unsigned char*)malloc((totalBytes + 1)*sizeof(unsigned char));
     for (unsigned int i = 0; i < allFileContent.size();i++) {
         *(prod + i) = allFileContent.at(i); 
     }
-    *buf_ptr = (unsigned char*)realloc((void *)prod, totalBytes); 
-    cout << "current file content [" << *buf_ptr << "]\n";
-    
+    // *buf_ptr = (unsigned char*)realloc((void *)prod, totalBytes); 
+    *buf_ptr = prod;
+    // struct stat buffer;
+    // int fd2 = open("romeo.txt", O_RDONLY);
+    // fsta/t(fd2, &buffer);
+    // size_t fileSize = buffer.st_size;
+    cout << "total bytes read" << totalBytes << "\n";
+    // cout << "file should be " << fileSize << endl;
+    FILE *fp;
+    fp = fopen("romeo.tmp", "w");
+    fwrite(*buf_ptr, 1, totalBytes, fp);
+    fclose(fp);
     return totalBytes;
 }
 
