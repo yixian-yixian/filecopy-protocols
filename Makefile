@@ -40,7 +40,7 @@ CPPFLAGS = -g -Wall -Werror -I$(C150LIB)
 C150LIB = $(COMP117)/files/c150Utils/
 C150AR = $(C150LIB)c150ids.a
 
-LDFLAGS =
+LDFLAGS = -lssl -lcrypto
 INCLUDES = $(C150LIB)c150dgmsocket.h $(C150LIB)c150nastydgmsocket.h $(C150LIB)c150network.h $(C150LIB)c150exceptions.h $(C150LIB)c150debug.h $(C150LIB)c150utility.h
 
 all: nastyfiletest makedatafile sha1test fileclient fileserver
@@ -48,14 +48,14 @@ all: nastyfiletest makedatafile sha1test fileclient fileserver
 #
 # Build the fileserver
 #
-fileserver: fileserver.cpp endtoend.cpp $(C150AR) $(INCLUDES)
-	$(CPP) -o fileserver $(CPPFLAGS) endtoend.cpp fileserver.cpp  $(C150AR)
+fileserver: fileserver.cpp $(C150AR) $(INCLUDES)
+	$(CPP) -o fileserver $(CPPFLAGS) localendtoend.cpp networkendtoend.cpp fileserver.cpp  $(C150AR) $(LDFLAGS)
 
 #
 # Build the fileclient
 #
 fileclient: fileclient.cpp $(C150AR) $(INCLUDES)
-	$(CPP) -o fileclient $(CPPFLAGS) endtoend.cpp fileclient.cpp $(C150AR) -lssl -lcrypto
+	$(CPP) -o fileclient $(CPPFLAGS) localendtoend.cpp networkendtoend.cpp fileclient.cpp $(C150AR) $(LDFLAGS)
 
 #
 # Build the nastyfiletest sample

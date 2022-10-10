@@ -5,6 +5,7 @@
 #define LAST "LAST"
 #define CONT "CONT"
 #define BUFSIZE 512
+#define READSIZE 1024
 const int UPPERBOUND = 1e6;
 using namespace std;
 using namespace C150NETWORK;  // for all the comp150 utilities
@@ -103,14 +104,14 @@ sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned& iteration, bool& lastfi
     while (ByteSent < file.contentSize){
         if (ByteSent + BUFSIZE > file.contentSize){
             sock.write((const char*)(file.contentbuf + ByteSent), file.contentSize - ByteSent);
-            printf("successfully sent %lu bytes, total goal is %lu bytes\n", ByteSent, file.contentSize);
+            // printf("successfully sent %lu bytes, total goal is %lu bytes\n", ByteSent, file.contentSize);
         }else{
             sock.write((const char*)(file.contentbuf + ByteSent), BUFSIZE);
-            printf("successfully sent %lu bytes, total goal is %lu bytes\n", ByteSent, file.contentSize);
+            // printf("successfully sent %lu bytes, total goal is %lu bytes\n", ByteSent, file.contentSize);
         }
         ByteSent += BUFSIZE;
     }
-    printf("successfully sent content of size\n");
+    printf("successfully sent content\n");
 
     // check Content sent successfully
     char ContentMsg[4]; 
@@ -154,7 +155,7 @@ sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned& iteration, bool& lastfi
         iteration++;
         return false;
     } else{
-        if (strcmp(ContentSHA1Msg, ACK) != 0){
+        if (strcmp(ContentSHA1Msg, ACK) != 0){ 
             printf("Response for content sha1 received is not ACK, it is %s.\n", ContentSHA1Msg);
             iteration++;
             return false;
@@ -243,15 +244,19 @@ readfromSrc(C150DgmSocket& sock)
 
     
     while(1) { // read until the end
-        chunk = sock.read((char *)temporaryBuf, contentlen);
-        printf("finished first read of size %lu\n", chunk);
-        cout << "read content message[" << (char *)temporaryBuf << "]"<< endl;
-        for (ssize_t t = 0; t <= chunk; t += sizeof(unsigned char)) {
+        chunk = sock.read((char *)temporaryBuf, READSIZE);
+        for (ssize_t t = 0; t < chunk; t += sizeof(unsigned char)) {
             allFileContent.push_back(*(temporaryBuf + t)); }
-        bzero(temporaryBuf, contentlen); // clean up the buf for next read 
+        bzero(temporaryBuf, chunk); // clean up the buf for next read 
         totalBytes += chunk;
-        if (totalBytes == contentlen) break;
+        printf("read %ld bytes of %d bytes \n", totalBytes, contentlen);
+        if (totalBytes == contentlen){
+            printf("completely finished %ld read\n", totalBytes);
+            break;
+
+        }
         if (sock.timedout()){
+            printf("timed out in while loop\n");
             sock.write(REJ, strlen(REJ));
             return false;
         }
@@ -274,29 +279,40 @@ readfromSrc(C150DgmSocket& sock)
     } else {
         sock.write(ACK, 3);
     }
-    
+
     // calculate SHA1 
-    for (unsigned int i = 0; i < allFileContent.size();i++) {
-        *(temporaryBuf + i) = allFileContent.at(i); 
+    unsigned char* prod = (unsigned char*)malloc((allFileContent.size())*sizeof(unsigned char));
+    bzero(prod, allFileContent.size());
+    for (unsigned int i = 0; i < allFileContent.size(); i ++) {
+        *(prod + i) = allFileContent.at(i); 
+        // cout << *(prod+i);
     }
-    // cout << "received["<< (char *)temporaryBuf << "]" << endl;
+
+    cout << "received["<< (char *)prod << "]" << endl;
+    cout <<endl;
     unsigned char obuf[20];
-    SHA1(temporaryBuf, totalBytes, obuf);
+    SHA1(prod, totalBytes, obuf);
+    bool failure = false;
     cout <<"calculated SHA1[";
     for (int j = 0; j < 20; j++)
     {
-        cout << obuf[j];
+        printf ("%02x", (unsigned int) obuf[j]);
         if (SHA1dup[j] != obuf[j]) {
-            sock.write(REJ, strlen(REJ));
-            printf("SHA1 calculated and received do not match \n");
-            return false;
+            failure = true;
         }
     }
     cout <<"]\n";
+    if (failure){
+        sock.write(REJ, strlen(REJ));
+        printf("SHA1 calculated and received do not match \n");
+        return false;
+    }
     sock.write(ACK, 3);
     if (status == LAST){
+        printf("this is the last message received\n");
         return true;
     }
+    printf("ERR: NOT LAST\n");
     return false;
 }
 
@@ -311,7 +327,6 @@ FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp)
     {
         printf("currently sending to socket\n");
         if (index == allFilesProp.size() - 1){lastfile = true;}
-        if (iteration > 1){break;}
         if (iteration < 10){
             if (!sendtoTar(sock, allFilesProp.at(index), iteration, lastfile)){continue;}
         }

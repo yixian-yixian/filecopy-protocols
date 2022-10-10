@@ -5,7 +5,11 @@
 const int UPPERBOUND = 1e6;
 using namespace std;
 
-
+/* GetFileName 
+ * purpose: read in all name strings of available files in the target directory 
+ * return: none 
+ * notes: filenames vector should now be filled with filenames string
+ */
 void GetFileNames(vector<string>& filenames, string tardir)
 {
     struct dirent *entry = nullptr;
@@ -34,8 +38,6 @@ ssize_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_pt
     vector<unsigned char> allFileContent;
     unsigned char* temporaryBuf = (unsigned char*)malloc(BUFSIZE * sizeof(unsigned char));
     ssize_t chunk = 0;
-    // = (*targetFile).fread(temporaryBuf, 1, BUFSIZE);
-    // totalBytes += chunk;
     while(!(*targetFile).feof()) { // read until the end
         chunk = (*targetFile).fread(temporaryBuf, 1, BUFSIZE);
         for (ssize_t t = 0; t < chunk; t += sizeof(unsigned char)){
@@ -44,43 +46,36 @@ ssize_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_pt
         bzero(temporaryBuf, BUFSIZE); // clean up the buf for next read 
         totalBytes += chunk;
     }
-    unsigned char* prod = (unsigned char*)malloc((totalBytes + 1)*sizeof(unsigned char));
+    unsigned char* prod = (unsigned char*)malloc((allFileContent.size())*sizeof(unsigned char));
     for (unsigned int i = 0; i < allFileContent.size();i++) {
         *(prod + i) = allFileContent.at(i); 
     }
-    // *buf_ptr = (unsigned char*)realloc((void *)prod, totalBytes); 
     *buf_ptr = prod;
-    // struct stat buffer;
-    // int fd2 = open("romeo.txt", O_RDONLY);
-    // fsta/t(fd2, &buffer);
-    // size_t fileSize = buffer.st_size;
-    cout << "total bytes read" << totalBytes << "\n";
-    // cout << "file should be " << fileSize << endl;
-    FILE *fp;
-    fp = fopen("romeo.tmp", "w");
-    fwrite(*buf_ptr, 1, totalBytes, fp);
-    fclose(fp);
     return totalBytes;
 }
 
 
 /* FileCopyE2ECheck
  * purpose: read the file content from an initiated C150nastyfile pointer 
+ * parameter:
+ *      int filenastiness: nastiness level for file read 
+ *      string tardir: target directory string name 
+ *      vector<fileProp>& allFilesProp_addr
  * return: total number of bytes read from the file object
- * notes: *buf_ptr is udpated to point to the read in file content       
+ * notes: *buf_ptr is updated to point to the read in file content       
  */
 void FileCopyE2ECheck(int filenastiness, string tardir, vector<fileProp>& allFilesProp_addr)
 {
     printf("currently in FileCopyE2ECheck\n\n");
     unsigned char* temporaryBuf = nullptr;
-    unordered_map<unsigned char*, unsigned char*> umSha1content; // key rethink
+    unordered_map<unsigned char*, unsigned char*> umSha1content; 
     int iteration = 0;
     ssize_t readedBytes = 0;
     vector<string> filenames;
     GetFileNames(filenames, tardir);
     
     for (long unsigned int i = 0; i < filenames.size(); i++){ // read one file 
-        while (iteration < UPPERBOUND)
+        while (iteration < UPPERBOUND) /* limit each file to retry on read under upperbound iterations */
         {
             C150NETWORK::C150NastyFile C150NF = C150NETWORK::C150NastyFile(filenastiness);
             printf("current filename %s \n", filenames[i].c_str());
@@ -90,18 +85,13 @@ void FileCopyE2ECheck(int filenastiness, string tardir, vector<fileProp>& allFil
             readedBytes = ReadaFile(&C150NF, &temporaryBuf);
             unsigned char obuf[20]; /* calculate SHA1 for overall file */
             SHA1(temporaryBuf, readedBytes, obuf);
-            printf("sha1 computed\n");
+            printf("sha1 computed\n");/* decide if this read is correct */
             unordered_map<unsigned char*, unsigned char*>::const_iterator got = umSha1content.find(obuf);
             printf("after searching in hashmap \n");
-            if (got == umSha1content.end()) { // NOT FOUND
-                umSha1content[obuf] = temporaryBuf; //populate this into unordered map
+            if (got == umSha1content.end()) { /* SHA1 not previously present */
+                umSha1content[obuf] = temporaryBuf; /* add SHA1 for this read into table */
                 printf("DID NOT find matching sha1\n");
-            } else{
-                for (int j = 0; j < 20; j++)
-                    {
-                        printf ("%02x", (unsigned int) obuf[j]);
-                    }
-                    printf("\n");
+            } else{ /* same SHA1 for correct file identified from table */
                 struct fileProp fileInfo = fileProp(filenames[i], obuf, readedBytes, temporaryBuf);
                 allFilesProp_addr.push_back(fileInfo);
                 break;
