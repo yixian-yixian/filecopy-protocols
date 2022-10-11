@@ -5,6 +5,28 @@
 const int UPPERBOUND = 1e6;
 using namespace std;
 
+// ------------------------------------------------------
+//
+//                   makeFileName
+//
+// Put together a directory and a file name, making
+// sure there's a / in between
+//
+// ------------------------------------------------------
+
+string
+makeFileName(string dir, string name) {
+  stringstream ss;
+
+  ss << dir;
+  // make sure dir name ends in /
+  if (dir.substr(dir.length()-1,1) != "/")
+    ss << '/';
+  ss << name;       // append file name to dir
+  return ss.str();  // return dir/name
+  
+}
+
 /* GetFileName 
  * purpose: read in all name strings of available files in the target directory 
  * return: none 
@@ -14,13 +36,10 @@ void GetFileNames(vector<string>& filenames, string tardir)
 {
     struct dirent *entry = nullptr;
     DIR *dp = nullptr;
-
     dp = opendir(tardir.c_str());
     if (dp != nullptr) {
         while ((entry = readdir(dp))){
-            if (entry->d_type == 8){
-                filenames.push_back(tardir + "/" + entry->d_name);
-            }
+            if (entry->d_type == 8) filenames.push_back(entry->d_name);
         }
     }
     closedir(dp);
@@ -59,48 +78,45 @@ ssize_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_pt
  * purpose: read the file content from an initiated C150nastyfile pointer 
  * parameter:
  *      int filenastiness: nastiness level for file read 
- *      string tardir: target directory string name 
- *      vector<fileProp>& allFilesProp_addr
+ *      string srcdir: source directory string name 
+ *      vector<fileProp>& allFilesProp_addr: all Filesproperty passed by reference
  * return: total number of bytes read from the file object
- * notes: *buf_ptr is updated to point to the read in file content       
+ * notes: allFilesProp_addr is now populated with the fileProp objects based on files
+ *        files in target directory       
  */
-void FileCopyE2ECheck(int filenastiness, string tardir, vector<fileProp>& allFilesProp_addr)
+void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFilesProp_addr, vector<string>& filenames)
 {
     printf("currently in FileCopyE2ECheck\n\n");
     unsigned char* temporaryBuf = nullptr;
     unordered_map<unsigned char*, unsigned char*> umSha1content; 
     int iteration = 0;
     ssize_t readedBytes = 0;
-    vector<string> filenames;
-    GetFileNames(filenames, tardir);
     
     for (long unsigned int i = 0; i < filenames.size(); i++){ // read one file 
         while (iteration < UPPERBOUND) /* limit each file to retry on read under upperbound iterations */
         {
             C150NETWORK::C150NastyFile C150NF = C150NETWORK::C150NastyFile(filenastiness);
-            printf("current filename %s \n", filenames[i].c_str());
-            void *success = C150NF.fopen(filenames[i].c_str(), "r");
+            string sourceFileName = makeFileName(srcdir, filenames[i]);
+            void *success = C150NF.fopen(sourceFileName.c_str(), "r");
             assert(success != NULL);
-            printf("while loop iteration %d \n", iteration);
             readedBytes = ReadaFile(&C150NF, &temporaryBuf);
             unsigned char obuf[20]; /* calculate SHA1 for overall file */
             SHA1(temporaryBuf, readedBytes, obuf);
-            printf("sha1 computed\n");/* decide if this read is correct */
             unordered_map<unsigned char*, unsigned char*>::const_iterator got = umSha1content.find(obuf);
-            printf("after searching in hashmap \n");
             if (got == umSha1content.end()) { /* SHA1 not previously present */
                 umSha1content[obuf] = temporaryBuf; /* add SHA1 for this read into table */
-                printf("DID NOT find matching sha1\n");
             } else{ /* same SHA1 for correct file identified from table */
+                /* initialize fileProp object based on the current filename, 
+                content and totalBytes read */
                 struct fileProp fileInfo = fileProp(filenames[i], obuf, readedBytes, temporaryBuf);
-                allFilesProp_addr.push_back(fileInfo);
+                allFilesProp_addr.push_back(fileInfo); /* append file informationto the list */
                 break;
             }
-            iteration++;
-            C150NF.fclose();
+            iteration++; /* unsuccessful find increment the iteration number for file read by 1*/
+            C150NF.fclose(); /* close current socket */
         }
         iteration = 0;
     }
-
+    printf("finished FileCopyE2ECheck\n");
 }
 

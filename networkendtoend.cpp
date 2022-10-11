@@ -6,318 +6,441 @@
 #define CONT "CONT"
 #define BUFSIZE 512
 #define READSIZE 1024
-const int UPPERBOUND = 1e6;
+#define MAXTIME 30000
+#define STATUS 4
+#define SHA_MSG 20
+#define CONTENT_SIZE 512
+#define UPPERBOUND 1000000
 using namespace std;
 using namespace C150NETWORK;  // for all the comp150 utilities
 
 
+// ------------------------------------------------------
+//
+//                   isFile
+//
+//  Make sure the supplied file is not a directory or
+//  other non-regular file.
+//     
+// ------------------------------------------------------
 
-// true: file successfully sent in one iteration
-// false: file fails to be sent and update iteration by 1 
-bool 
-sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned& iteration, bool& lastfile)
-{
-    sock.turnOnTimeouts(30000);
-    // TODO send file_name and its SHA1 
+bool
+isFile(string fname) {
+  const char *filename = fname.c_str();
+  struct stat statbuf;  
+  if (lstat(filename, &statbuf) != 0) {
+    fprintf(stderr,"isFile: Error stating supplied source file %s\n", filename);
+    return false;
+  }
 
-    // Send status
-    if (lastfile){
-        sock.write((const char*)LAST, strlen(LAST));
-    }else{
-        sock.write((const char*)CONT, strlen(CONT));
+  if (!S_ISREG(statbuf.st_mode)) {
+    fprintf(stderr,"isFile: %s exists but is not a regular file\n", filename);
+    return false;
+  }
+  return true;
+}
+
+
+// ------------------------------------------------------
+//
+//                   copyFile
+//
+// Copy a single file from sourcdir to target dir
+//
+// ------------------------------------------------------
+
+void
+copyFile(string sourceDir, string fileName, string targetDir, int nastiness) {
+
+  //  Misc variables, mostly for return codes
+  void *fopenretval;
+  size_t len;
+  string errorString;
+  char *buffer;
+  struct stat statbuf;  
+  size_t sourceSize;
+
+  // Put together directory and filenames SRC/file TARGET/file
+  string sourceName = makeFileName(sourceDir, fileName);
+  string targetName = makeFileName(targetDir, fileName);
+
+  // make sure the file we're copying is not a directory
+  if (!isFile(sourceName)) {
+    cerr << "Input file " << sourceName << " is a directory or other non-regular file. Skipping" << endl;
+    return;
+  }
+
+  cout << "Copying " << sourceName << " to " << targetName << endl;
+
+  try {
+
+    // Read whole input file 
+    if (lstat(sourceName.c_str(), &statbuf) != 0) {
+      fprintf(stderr,"copyFile: Error stating supplied source file %s\n", sourceName.c_str());
+     exit(20);
     }
-    printf("successfully sent status\n");
+  
+    // Make an input buffer large enough for
+    // the whole file
+    sourceSize = statbuf.st_size;
+    buffer = (char *)malloc(sourceSize);
 
-    // check status sent successfully
-    char statusMsg[4]; 
-    sock.read(statusMsg, sizeof(statusMsg));
+    // Define the wrapped file descriptors
+    //
+    // All the operations on outputFile are the same
+    // ones you get documented by doing "man 3 fread", etc.
+    // except that the file descriptor arguments must
+    // be left off.
+    //
+    // Note: the NASTYFILE type is meant to be similar
+    //       to the Unix FILE type
+    NASTYFILE inputFile(nastiness);      // See c150nastyfile.h for interface
+    NASTYFILE outputFile(nastiness);     // NASTYFILE is supposed to
+                                         // remind you of FILE
+                                         //  It's defined as: 
+                                         // typedef C150NastyFile NASTYFILE
+  
+    // do an fopen on the input file
+    fopenretval = inputFile.fopen(sourceName.c_str(), "rb");  
+                                         // wraps Unix fopen
+                                         // Note rb gives "read, binary"
+                                         // which avoids line end munging
+  
+    if (fopenretval == NULL) {
+      cerr << "Error opening input file " << sourceName << 
+	      " errno=" << strerror(errno) << endl;
+      exit(12);
+    }
+  
+    // Read the whole file
+    len = inputFile.fread(buffer, 1, sourceSize);
+    if (len != sourceSize) {
+      cerr << "Error reading file " << sourceName << 
+	      "  errno=" << strerror(errno) << endl;
+      exit(16);
+    }
+  
+    if (inputFile.fclose() != 0 ) {
+      cerr << "Error closing input file " << targetName << 
+	      " errno=" << strerror(errno) << endl;
+      exit(16);
+    }
+
+
+    // do an fopen on the output file
+    fopenretval = outputFile.fopen(targetName.c_str(), "wb");  
+                                         // wraps Unix fopen
+                                         // Note wb gives "write, binary"
+                                         // which avoids line and munging
+  
+    // Write the whole file
+    len = outputFile.fwrite(buffer, 1, sourceSize);
+    if (len != sourceSize) {
+      cerr << "Error writing file " << targetName << 
+	      "  errno=" << strerror(errno) << endl;
+      exit(16);
+    }
+  
+    if (outputFile.fclose() == 0 ) {
+       cout << "Finished writing file " << targetName <<endl;
+    } else {
+      cerr << "Error closing output file " << targetName << 
+	      " errno=" << strerror(errno) << endl;
+      exit(16);
+    }
+
+    // Free the input buffer to avoid memory leaks
+    free(buffer);
+
+    // Handle any errors thrown by the file framekwork
+  }   catch (C150Exception& e) {
+       cerr << "nastyfiletest:copyfile(): Caught C150Exception: " << 
+	       e.formattedExplanation() << endl;
+    
+  }
+}
+
+/* ServerRESCheck 
+ * purpose: Check if the server sends a confirmation message
+ * parameter: 
+ *            C150DgmSocket& sock: reference to socket object
+ * return: true if the message received is ACK, false otherwise
+ * notes: N/A
+ */
+bool 
+ServerRESCheck(C150DgmSocket& sock, unsigned& iteration)
+{
+    char serverRES[4]; 
+    sock.read(serverRES, sizeof(serverRES));
 
     if (sock.timedout()){
-        printf("No ACK for statusMsg recevied.\n");
         iteration++;
         return false;
     }else{
-        if (strcmp(statusMsg, ACK) != 0){
-            printf("Response for status received is not ACK, it is %s.\n", statusMsg);
+        if (strcmp(serverRES, ACK) != 0){
             iteration++;
             return false;
-        }else{
-            printf("Response for status received is %s.\n", statusMsg); 
         }
     }
+    return true;
 
+}
+
+/* sendtoTar 
+ * purpose: Check if the server sends a confirmation message
+ * parameter: 
+ *            C150DgmSocket& sock: reference to socket object
+ *            fileProp& file: reference to file struct
+ *            unsigned& iteration: reference to the iteration number
+ *            bool& lastfile: reference to whether the file sent is last
+ * return: true if the server response is ACK, false otherwise
+ * notes: true: file successfully sent in one iteration
+ *        false: file fails to be sent and update iteration by 1
+ */
+bool 
+sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned& iteration, bool& lastfile, string filename)
+{
+    // Send status
+    if (lastfile){
+        sock.write(LAST, strlen(LAST));
+    }else{
+        sock.write(CONT, strlen(CONT));
+    }
     
-    // send Size 
+    // check status sent successfully
+    if (!ServerRESCheck(sock, iteration)){return false;}
+
+    // Send filename 
+    ssize_t filenameSize = strlen(filename.c_str());
+    sock.write((const char*)filename.c_str(), filenameSize+1);
+    // Check filename sent successfully
+    if (!ServerRESCheck(sock, iteration)){return false;}
+    
+    // Send filename's Sha1
+    unsigned char obuf[20];
+    SHA1((unsigned char*)filename.c_str(), filenameSize, obuf);
+    sock.write((const char*)obuf, 21);
+
+    // Check filename's SHA1 sent successfully
+    if (!ServerRESCheck(sock, iteration)){return false;}
+    if (!ServerRESCheck(sock, iteration)){return false;}
+
+    // Send Size 
     string sizeField = to_string(file.contentSize); 
     ssize_t contentSize = strlen(sizeField.c_str());
     sock.write((const char*)sizeField.c_str(), contentSize);
-    printf("successfully sent size: %s\n", (const char*)sizeField.c_str());
 
-    // check Size sent successfully
-    char sizeMsg[4]; 
-    bzero(sizeMsg,4);
-    sock.read(sizeMsg, sizeof(sizeMsg));
-    
-    if (sock.timedout()){
-        printf("No ACK for sizeMsg recevied.\n");
-        iteration++;
-        return false;
-    }else{
-        if (strcmp(sizeMsg, ACK) != 0){
-            printf("Response for size received is not ACK, it is %s.\n", sizeMsg);
-            iteration++;
-            return false;
-        }else{
-            printf("Response for size received is %s.\n", sizeMsg); 
-        }
-    }
+    // Check Size sent successfully
+    if (!ServerRESCheck(sock, iteration)){return false;}
     
     // send SHA1
-    cout << "sending SHA1[";
-    for (int j = 0; j < 20; j++)
-    {
-        printf ("%02x", (unsigned int) file.fileSHA1[j]);
-    }
-    cout <<"]\n";
     sock.write((const char*)file.fileSHA1, 21);
-    printf("successfully sent sha1\n");
 
     // check SHA1 sent successfully
-    char SHA1Msg[4]; 
-    bzero(SHA1Msg, 4);
-    sock.read(SHA1Msg, sizeof(SHA1Msg));
-    if (sock.timedout()){
-        iteration++;
-        return false;
-    } else {
-        if (strcmp(SHA1Msg, ACK) != 0){
-            printf("Response for sha1 received is not ACK, it is %s.\n", SHA1Msg);
-            iteration++;
-            return false;
-        }else{
-            printf("Response for sha1 received is %s.\n", SHA1Msg); 
-        }
-    }
+    if (!ServerRESCheck(sock, iteration)){return false;}
     
     // send Content 
     ssize_t ByteSent = 0; 
     while (ByteSent < file.contentSize){
         if (ByteSent + BUFSIZE > file.contentSize){
             sock.write((const char*)(file.contentbuf + ByteSent), file.contentSize - ByteSent);
-            // printf("successfully sent %lu bytes, total goal is %lu bytes\n", ByteSent, file.contentSize);
         }else{
             sock.write((const char*)(file.contentbuf + ByteSent), BUFSIZE);
-            // printf("successfully sent %lu bytes, total goal is %lu bytes\n", ByteSent, file.contentSize);
         }
         ByteSent += BUFSIZE;
     }
-    printf("successfully sent content\n");
 
     // check Content sent successfully
-    char ContentMsg[4]; 
-    bzero(ContentMsg, 4);
-    sock.read(ContentMsg, sizeof(ContentMsg));
-    if (sock.timedout()){
-        iteration++;
-        return false;
-    } else{
-        if (strcmp(ContentMsg, ACK) != 0){
-            printf("Response for content received is not ACK, it is %s.\n", ContentMsg);
-            iteration++;
-            return false;
-        }else{
-            printf("Response for content received is %s.\n", ContentMsg); 
-        }
-    }
-
     // check size is equal
-    char ContentSizeMsg[4]; 
-    bzero(ContentSizeMsg, 4);
-    sock.read(ContentSizeMsg, sizeof(ContentSizeMsg));
-    if (sock.timedout()){
-        iteration++;
-        return false;
-    } else{
-        if (strcmp(ContentSizeMsg, ACK) != 0){
-            printf("Response for content size received is not ACK, it is %s.\n", ContentSizeMsg);
-            iteration++;
-            return false;
-        }else{
-            printf("Response for content size received is %s.\n", ContentSizeMsg); 
-        }
-    }
-
     // check sha1 is equal
-    char ContentSHA1Msg[4]; 
-    bzero(ContentSHA1Msg, 4);
-    sock.read(ContentSHA1Msg, sizeof(ContentSHA1Msg));
-    if (sock.timedout()){
-        iteration++;
-        return false;
-    } else{
-        if (strcmp(ContentSHA1Msg, ACK) != 0){ 
-            printf("Response for content sha1 received is not ACK, it is %s.\n", ContentSHA1Msg);
-            iteration++;
-            return false;
-        }else{
-            printf("Response for content sha1 received is %s.\n", ContentSHA1Msg); 
-        }
+    for (int i = 0; i < 3; i++){
+        if (!ServerRESCheck(sock, iteration)){return false;}
     }
-
     return true;
 }
 
-
-// True  - end of directory 
-// False - more files to read from directory 
-// send ACK if (1) SIZE received (2) SHA1 received 
-// (3) CONTENTBUF of expected SHA1 and SIZE received 
-bool
-readfromSrc(C150DgmSocket& sock)
+/* readSizefromSocket 
+ * purpose: read provided amount of bytes from socket 
+ * parameter: 
+ *      C150DgmSocket& sock: reference to socket object 
+ *      size_t bytestoRead: number of bytes to read from socket
+ *      char& bytes_storage: character array to store read bytes passed by reference
+ * return: True if no timeout and signalize continuation of program, False if timeout 
+ *          and this iteration terminates.
+ * notes: none
+*/
+bool 
+readSizefromSocket(C150DgmSocket& sock, size_t bytestoRead, char** bytes_storage)
 {
-    sock.turnOnTimeouts(30000);
-    // receive status
-    char statusMsg[4];
-    bzero(statusMsg, 4);
-    sock.read(statusMsg, sizeof(statusMsg));
-    string status(statusMsg);
-    printf("successfully read message %s\n", statusMsg);
-    
-    // send ACK
-    if (!sock.timedout()){ 
-        sock.write(ACK, 3);
-        printf("finished sending ACK\n");
-    }else{
-        printf("broken write below\n");
-        sock.write(REJ, strlen(REJ));
-        printf("nope write is fine\n");
-        return false;
-    }
-    
-    // receive Size 
-    char sizeMsg[BUFSIZE];
-    bzero(sizeMsg, BUFSIZE);
-    sock.read(sizeMsg, sizeof(sizeMsg));
-    printf("current size %s\n", sizeMsg);
-
-    // send ACK
-    if (!sock.timedout()){ 
-        printf("DID NOT TIME OUT\n");
-        sock.write(ACK, 3);
-        printf("sending ACK\n");
-    }else{
-        printf("broken write below\n");
-        sock.write(REJ, strlen(REJ));
-        printf("nope write is fine\n");
-        return false;
-    }
-    
-    // receive SHA1
-    char SHA1Msg[20];
-    bzero(SHA1Msg, 20);
-    sock.read(SHA1Msg, 20);
-    unsigned char SHA1dup[20];
-    cout << "received SHA1:[";
-    for (int j = 0; j < 20; j++)
-    {
-        SHA1dup[j] = (unsigned char)SHA1Msg[j];
-        printf ("%02x", SHA1dup[j]);
-    }
-    cout << "]\n";
-
-    // send ACK
-    if (!sock.timedout()){ 
-        sock.write(ACK, 3);
-        printf("write ACK for SHA1\n");
-    } else{
+    bzero((*bytes_storage), bytestoRead);
+    sock.read((*bytes_storage), bytestoRead);
+    /* evaluate conditions to send ACK or REJ */
+    if (sock.timedout()){ 
         sock.write(REJ, strlen(REJ));
         return false;
     }
+    sock.write(ACK, strlen(ACK));
+    return true;
+    
+}
 
-    // receive content 
-    string size(sizeMsg);
-    int contentlen = atoi(size.c_str());
-    vector<unsigned char> allFileContent;
-    ssize_t totalBytes = 0;
+/* readContentfromSocket 
+ * purpose: read the incoming packets that represent content from server socket
+ * parameter: 
+ *     C150DgmSocket& sock: reference to socket object
+ *     size_t contentSize: total bytes to read from the content
+ *     unsigned char** read_result_addr: address of pointer to the finally read bytes
+ * return: True if no timeout and signalize continuation of program, False if timeout 
+ *          and this iteration terminates. 
+ * notes: none
+*/
+bool
+readContentfromSocket(C150DgmSocket& sock, int contentlen, unsigned char** read_result_addr)
+{
+    vector<unsigned char> allFileContent; /* dynamically expanded memory for all content bytes */
+    ssize_t totalBytes = 0, chunk = 0;;
     unsigned char* temporaryBuf = (unsigned char*)malloc(contentlen * sizeof(unsigned char));
-    ssize_t chunk = 0;
-
-    
-    while(1) { // read until the end
+    while(1) { /* read until all bytes from sockets are received */
         chunk = sock.read((char *)temporaryBuf, READSIZE);
         for (ssize_t t = 0; t < chunk; t += sizeof(unsigned char)) {
+            /* put read bytes into dynamically expanding memories */
             allFileContent.push_back(*(temporaryBuf + t)); }
-        bzero(temporaryBuf, chunk); // clean up the buf for next read 
+        bzero(temporaryBuf, chunk); /* clean up the buf for next read */  
         totalBytes += chunk;
-        printf("read %ld bytes of %d bytes \n", totalBytes, contentlen);
-        if (totalBytes == contentlen){
-            printf("completely finished %ld read\n", totalBytes);
-            break;
-
-        }
+        if (totalBytes == contentlen){break;}
         if (sock.timedout()){
-            printf("timed out in while loop\n");
             sock.write(REJ, strlen(REJ));
-            return false;
-        }
+            return false; }
     }
-
-    if (!sock.timedout()){ 
-        sock.write(ACK, 3);
-        printf("write ACK after entire read \n");
-    } else{
+    /* evaluate conditions to send ACK */
+    if (!sock.timedout()){ /* confirm entire read for content */
+        sock.write(ACK, strlen(ACK));
+    }else{
+        sock.write(REJ, strlen(REJ));
+        return false;
+    }
+    /* compare total received bytes with received contentlen field */
+    if (totalBytes == contentlen){
+        sock.write(ACK, strlen(ACK));
+    } else {
         sock.write(REJ, strlen(REJ));
         return false;
     }
 
-    // compare length 
-    printf("Content length %u and actual read %lu\n", contentlen, totalBytes);
-    if (totalBytes != contentlen){
-        printf("Content length %u and actual read %lu does not match \n", contentlen, totalBytes);
+    /* calculate SHA1 of the received content bytes */
+    unsigned char* prod = (unsigned char*)malloc((allFileContent.size())*sizeof(unsigned char));
+    bzero(prod, allFileContent.size()); /* zero out the field */
+    for (unsigned int i = 0; i < allFileContent.size(); i ++) {
+        *(prod + i) = allFileContent.at(i); 
+    }
+    *read_result_addr = prod;
+    return true;
+
+}
+
+/* compareSHA1 
+ * purpose: compare the receivedSHA1 and calculatedSHA1 byte by byte 
+ * parameter: 
+ * return: True if every byte match, False if any byte does not match
+ */
+bool 
+compareSHA1(unsigned char** receivedSHA1, unsigned char** calculateSHA1)
+{
+    for (int j = 0; j < 20; j++) {
+        if ((*receivedSHA1)[j] != (*calculateSHA1)[j])
+            return false;
+    }
+    return true;
+
+}
+
+/* readfromSrc 
+ * purpose: read any incoming packets in order from the server socket 
+ * parameter: 
+ *     C150DgmSocket& sock: reference to socket object 
+ * return: True if the socket have received the last packet in the 
+ *          network stream, False if the socket is expecting more
+ *          packets in the next read 
+ * notes: none  
+ */
+bool
+readfromSrc(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles)
+{
+    /* 1ACK-receive status message from client */ 
+    char *statusMsg = (char *)malloc(STATUS * sizeof(char));
+    if (!readSizefromSocket(sock, STATUS, &statusMsg)){
+        return false;
+    } 
+
+    /* 2ACK-receive filename from client */
+    char *filename = (char*)malloc(BUFSIZE * sizeof(char));
+    if (!readSizefromSocket(sock, BUFSIZE, &filename)){
+        return false;
+    } 
+    string filename_str(filename); /* convert read characteres back to string */
+    unsigned char *shabuf = (unsigned char*) malloc(SHA_MSG * sizeof(unsigned char));
+    SHA1((unsigned char*)filename_str.c_str(), strlen(filename_str.c_str()), shabuf);
+
+    /* 3ACK-receive filename SHA1 from client */
+    char *filenameSHA1 = (char*)malloc(SHA_MSG * sizeof(char));
+    if (!readSizefromSocket(sock, SHA_MSG, &filenameSHA1)){
+        return false;
+    } 
+    
+    /* 4ACK-check consistency in received and calculated filename SHA1 */
+    unsigned char *FileSHA1dup = (unsigned char*)malloc(SHA_MSG * sizeof(unsigned char)); 
+    for (int j = 0; j < 20; j++){ 
+        FileSHA1dup[j] = (unsigned char)filenameSHA1[j];
+    }
+    if (!compareSHA1(&shabuf, &FileSHA1dup)) {
         sock.write(REJ, strlen(REJ));
         return false;
     } else {
-        sock.write(ACK, 3);
+        sock.write(ACK, strlen(ACK));
     }
+    
+    /* 5ACK-receive content size from client */ 
+    char *sizeMsg = (char*)malloc(CONTENT_SIZE * sizeof(char));
+    if (!readSizefromSocket(sock, CONTENT_SIZE, &sizeMsg)){return false;}
 
-    // calculate SHA1 
-    unsigned char* prod = (unsigned char*)malloc((allFileContent.size())*sizeof(unsigned char));
-    bzero(prod, allFileContent.size());
-    for (unsigned int i = 0; i < allFileContent.size(); i ++) {
-        *(prod + i) = allFileContent.at(i); 
-        // cout << *(prod+i);
-    }
-
-    cout << "received["<< (char *)prod << "]" << endl;
-    cout <<endl;
-    unsigned char obuf[20];
-    SHA1(prod, totalBytes, obuf);
-    bool failure = false;
-    cout <<"calculated SHA1[";
-    for (int j = 0; j < 20; j++)
-    {
-        printf ("%02x", (unsigned int) obuf[j]);
-        if (SHA1dup[j] != obuf[j]) {
-            failure = true;
-        }
-    }
-    cout <<"]\n";
-    if (failure){
-        sock.write(REJ, strlen(REJ));
-        printf("SHA1 calculated and received do not match \n");
+    /* 6ACK-receive content SHA1 from client */
+    char *SHA1Msg = (char*)malloc(SHA_MSG * sizeof(char));
+    if (!readSizefromSocket(sock, SHA_MSG, &SHA1Msg)){ 
         return false;
     }
-    sock.write(ACK, 3);
-    if (status == LAST){
-        printf("this is the last message received\n");
-        return true;
+    unsigned char *SHA1dup = (unsigned char*)malloc(SHA_MSG * sizeof(char));
+    bzero(SHA1dup, 20);
+    for (int j = 0; j < 20; j++){ 
+        SHA1dup[j] = (unsigned char)SHA1Msg[j];
     }
-    printf("ERR: NOT LAST\n");
-    return false;
+    /* 7ACK-receive content from client */
+    /* 8ACK-receive correct size from client*/
+    string size(sizeMsg); /* convert content sizeMsg to integer representation */
+    int contentlen = atoi(size.c_str());
+    unsigned char* prod = nullptr;
+    if (!readContentfromSocket(sock, contentlen, &prod)){
+        /* unsuccessful read of the entire content */
+        free(prod);
+        return false;
+    };
+
+    unsigned char *obuf = (unsigned char*)malloc(SHA_MSG * sizeof(unsigned char));
+    SHA1((const unsigned char *)prod, contentlen, obuf);
+
+    /*9ACK-check consistency in received and calculated SHA1 to client */
+    if (!compareSHA1(&obuf, &SHA1dup)) {
+        sock.write(REJ, strlen(REJ));
+        return false;
+    }
+    sock.write(ACK, strlen(ACK));
+    string status(statusMsg);
+    fileProp file_unit = fileProp(filename_str, SHA1dup, contentlen, prod);
+    allArrivedFiles.push_back(file_unit);
+    return (status == LAST) ? true : false;
 }
 
 void 
-FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp)
+FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vector<string>& filenames)
 {
     // if one file fails more than 3 times, give up
     long unsigned int index = 0;
@@ -328,7 +451,7 @@ FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp)
         printf("currently sending to socket\n");
         if (index == allFilesProp.size() - 1){lastfile = true;}
         if (iteration < 10){
-            if (!sendtoTar(sock, allFilesProp.at(index), iteration, lastfile)){continue;}
+            if (!sendtoTar(sock, allFilesProp.at(index), iteration, lastfile, filenames.at(index))){continue;}
         }
         index++;
         iteration = 0;
@@ -337,30 +460,15 @@ FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp)
 }
 
 void 
-FileReceiveE2ECheck(C150DgmSocket& sock)
+FileReceiveE2ECheck(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles)
 {
+    sock.turnOnTimeouts(MAXTIME);/* each file should be received within the same time period */
     printf("inside file receive e2e check\n");
     while (1){
         printf("currently reading from socket\n");
-        if (readfromSrc(sock)) break;
+        if (readfromSrc(sock, allArrivedFiles)) break;
         printf("not last message\n");
     }
+    printf("last message\n");
+    printf("totally read %ld files", allArrivedFiles.size());
 }
-
-
-
-// void 
-// formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf)
-// {
-//     stringstream contentSizeSS;
-//     contentSizeSS << SIZE << singleFile.contentSize << "\n" << SHA1 << singleFile.fileSHA1 << "\n\n\n";
-//     string header = contentSizeSS.str(); 
-//     const char* h = header.c_str();
-//     ssize_t totalBufSize = strlen(h) + singleFile.contentSize;
-//     char *generateBuf = (char*)malloc(totalBufSize * sizeof(unsigned char));
-//     strcpy(generateBuf, h);
-//     strcpy(generateBuf + strlen(h), (const char*)singleFile.contentbuf);
-//     *requestBuf = (unsigned char*)generateBuf;
-//     cout << *requestBuf << endl;
-// }
-

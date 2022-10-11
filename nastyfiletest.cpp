@@ -260,7 +260,7 @@ copyFile(string sourceDir, string fileName, string targetDir, int nastiness) {
     //
     if (lstat(sourceName.c_str(), &statbuf) != 0) {
       fprintf(stderr,"copyFile: Error stating supplied source file %s\n", sourceName.c_str());
-     exit(20);
+      exit(20);
     }
   
     //
@@ -342,6 +342,7 @@ copyFile(string sourceDir, string fileName, string targetDir, int nastiness) {
 	      " errno=" << strerror(errno) << endl;
       exit(16);
     }
+
 
     //
     // Free the input buffer to avoid memory leaks

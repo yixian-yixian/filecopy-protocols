@@ -31,10 +31,14 @@
 using namespace std;
 using namespace C150NETWORK;  // for all the comp150 utilities
 
-bool sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned& iteration, bool& lastfile);
-bool readfromSrc(C150DgmSocket& sock);
-void FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp);
-void FileReceiveE2ECheck(C150DgmSocket& sock);
-// void formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf);
+bool isFile(string fname);
+void copyFile(string sourceDir, string fileName, string targetDir, int nastiness);
+bool ServerRESCheck(C150DgmSocket& sock);
+bool sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned& iteration, bool& lastfile, string filename);
+bool readfromSrc(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles);
+void FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vector<string>& filenames);
+void FileReceiveE2ECheck(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles);
+bool readSizefromSocket(C150DgmSocket& sock, size_t bytestoRead, char** bytes_storage);
+
 
 #endif

@@ -20,12 +20,20 @@
 #define __LOCALENDTOEND_H_INCLUDED__
 
 #include "c150nastyfile.h"
+#include "c150grading.h"
 #include <openssl/sha.h>
 #include <vector>
 #include <unordered_map>
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <cstring>                // for errno string formatting
+#include <cerrno>
+#include <cstring>               // for strerro
+#include <iostream>               // for cout
+#include <fstream>                // for input files
+
 
 typedef struct fileProp{
     string filename;
@@ -42,7 +50,8 @@ typedef struct fileProp{
 
 ssize_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_ptr);
 void GetFileNames(vector<string>& filenames, string tardir);
-void FileCopyE2ECheck(int filenastiness, string tardir, vector<fileProp>& allFilesProp_addr);
+void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFilesProp_addr, vector<string>& filenames);
+string makeFileName(string dir, string name);
 
 
 #endif
