@@ -108,26 +108,52 @@ main(int argc, char *argv[])
         vector<fileProp> allArrivedFiles;
      
         FileReceiveE2ECheck(*sock, allArrivedFiles);
-        vector<string> filenames;
 
-        for (fileProp item : allArrivedFiles){
-            copyFile(srcDir, item.filename, tarDir, filenastiness);
-            filenames.push_back(item.filename);
-        }
-        vector<fileProp> allReadinFiles;
-        FileCopyE2ECheck(filenastiness, tarDir, allReadinFiles, filenames);
-    
-        for (long unsigned int index = 0; index < allReadinFiles.size(); index++){
+        long unsigned int index = 0;
+        bool currentfilefail = false;
+        while (index < allArrivedFiles.size()){
+            currentfilefail = false;
+            vector<string> filenames;
+            copyFile(srcDir, allArrivedFiles.at(index).filename, tarDir, filenastiness);
+            filenames.push_back(allArrivedFiles.at(index).filename);
+            vector<fileProp> allReadinFiles;
+            FileCopyE2ECheck(filenastiness, tarDir, allReadinFiles, filenames);
             for (int j = 0; j < 20; j++) {
-                if (allReadinFiles.at(index).fileSHA1[j] != allArrivedFiles.at(index).fileSHA1[j]){
-                    cout << "local file [" << allReadinFiles.at(index).filename << "] [";
-                    printf("%02x", (unsigned int)allReadinFiles.at(index).fileSHA1[j]);
-                    cout << "] doesn't match original file [" << allArrivedFiles.at(index).filename << "] [";
-                    printf("%02x", (unsigned int)allArrivedFiles.at(index).fileSHA1[j]);
-                    cout << "].\n";
+                if (allReadinFiles.at(0).fileSHA1[j] != allArrivedFiles.at(index).fileSHA1[j]){
+                    // cout << "local file [" << allReadinFiles.at(pos).filename << "] [";
+                    // printf("%02x", (unsigned int)allReadinFiles.at(pos).fileSHA1[j]);
+                    // cout << "] doesn't match original file [" << allArrivedFiles.at(pos).filename << "] [";
+                    // printf("%02x", (unsigned int)allArrivedFiles.at(pos).fileSHA1[j]);
+                    // cout << "].\n"
+                    cout << "local file [" << allReadinFiles.at(0).filename << "] doesn't match.\n";
+                    currentfilefail = true;
+                    break;
                 }
             }
+            if (currentfilefail) {
+                cout << "successfuly match [" << index+1 << "] files! moving onwards\n";
+                index++;
+            }
         }
+
+        // for (fileProp item : allArrivedFiles){
+        //     copyFile(srcDir, item.filename, tarDir, filenastiness);
+        //     filenames.push_back(item.filename);
+        // }
+        // vector<fileProp> allReadinFiles;
+        // FileCopyE2ECheck(filenastiness, tarDir, allReadinFiles, filenames);
+    
+        // for (long unsigned int index = 0; index < allReadinFiles.size(); index++){
+        //     for (int j = 0; j < 20; j++) {
+        //         if (allReadinFiles.at(index).fileSHA1[j] != allArrivedFiles.at(index).fileSHA1[j]){
+        //             cout << "local file [" << allReadinFiles.at(index).filename << "] [";
+        //             printf("%02x", (unsigned int)allReadinFiles.at(index).fileSHA1[j]);
+        //             cout << "] doesn't match original file [" << allArrivedFiles.at(index).filename << "] [";
+        //             printf("%02x", (unsigned int)allArrivedFiles.at(index).fileSHA1[j]);
+        //             cout << "].\n";
+        //         }
+        //     }
+        // }
         printf("MISSION COMPLETE!\n");
     } 
     catch (C150NetworkException& e){
