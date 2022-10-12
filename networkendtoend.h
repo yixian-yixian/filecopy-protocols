@@ -21,6 +21,7 @@
 
 #include "c150nastydgmsocket.h"
 #include "c150debug.h"
+#include "c150grading.h"
 #include <vector>
 #include <unordered_map>
 #include <openssl/sha.h>
@@ -31,8 +32,6 @@
 using namespace std;
 using namespace C150NETWORK;  // for all the comp150 utilities
 
-bool isFile(string fname);
-void copyFile(string sourceDir, string fileName, string targetDir, int nastiness);
 bool ServerRESCheck(C150DgmSocket& sock);
 bool sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned& iteration, bool& lastfile, string filename);
 bool readfromSrc(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles);

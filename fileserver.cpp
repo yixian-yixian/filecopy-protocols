@@ -52,7 +52,6 @@
 // --------------------------------------------------------------
 
 #include "c150nastydgmsocket.h"
-#include "c150debug.h"
 #include "c150nastyfile.h"
 #include "localendtoend.h"
 #include "networkendtoend.h"
@@ -69,6 +68,7 @@ int
 main(int argc, char *argv[])
 {
     int filenastiness, networknastiness;               // how aggressively do we drop packets, etc?
+    GRADEME(argc, argv);
 
     // Check command line argument 
     if (argc != 4)  {
@@ -89,82 +89,56 @@ main(int argc, char *argv[])
     string tarDir = argv[3];
     printf("current filenastiness %d\n", filenastiness);
 
-    // TODO update server debug message 
-    // setUpDebugLogging("fileserverdebug.txt",argc, argv);
-    // c150debug->setIndent("    ");
 
     // Set up socket for listening mode 
     try {
         // Create the socket 
-        c150debug->printf(C150APPLICATION,"Creating C150NastyDgmSocket(nastiness=%d)",
-                          networknastiness);
         C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
-        c150debug->printf(C150APPLICATION,"Ready to accept messages");
-        char *srcdir = (char *)malloc(MAX_REQUEST_BUF * sizeof(char));
-        readSizefromSocket(*sock, MAX_REQUEST_BUF, &srcdir);
-        string srcDir(srcdir);
-        free(srcdir);
-        // unordered_map<char *filename, fileProp info> 
+        sock -> turnOnTimeouts(5000);
         vector<fileProp> allArrivedFiles;
-     
         FileReceiveE2ECheck(*sock, allArrivedFiles);
 
-        long unsigned int index = 0;
         bool currentfilefail = false;
-        while (index < allArrivedFiles.size()){
-            currentfilefail = false;
-            vector<string> filenames;
-            copyFile(srcDir, allArrivedFiles.at(index).filename, tarDir, filenastiness);
-            filenames.push_back(allArrivedFiles.at(index).filename);
-            vector<fileProp> allReadinFiles;
-            FileCopyE2ECheck(filenastiness, tarDir, allReadinFiles, filenames);
-            for (int j = 0; j < 20; j++) {
-                if (allReadinFiles.at(0).fileSHA1[j] != allArrivedFiles.at(index).fileSHA1[j]){
-                    // cout << "local file [" << allReadinFiles.at(pos).filename << "] [";
-                    // printf("%02x", (unsigned int)allReadinFiles.at(pos).fileSHA1[j]);
-                    // cout << "] doesn't match original file [" << allArrivedFiles.at(pos).filename << "] [";
-                    // printf("%02x", (unsigned int)allArrivedFiles.at(pos).fileSHA1[j]);
-                    // cout << "].\n"
-                    cout << "local file [" << allReadinFiles.at(0).filename << "] doesn't match.\n";
-                    currentfilefail = true;
-                    break;
-                }
-            }
-            if (currentfilefail) {
-                cout << "successfuly match [" << index+1 << "] files! moving onwards\n";
-                index++;
-            }
+        unordered_map<string, fileProp*> TargetFiles;
+        vector<string> filenames;
+        vector<fileProp> allReadinFiles;
+        GetFileNames(filenames, tarDir);
+        FileCopyE2ECheck(filenastiness, tarDir, allReadinFiles, filenames);
+        for (long unsigned int i = 0; i < filenames.size(); i++)
+        {
+            string filename = filenames.at(i);
+            TargetFiles[filename] = &(allReadinFiles.at(i));
         }
 
-        // for (fileProp item : allArrivedFiles){
-        //     copyFile(srcDir, item.filename, tarDir, filenastiness);
-        //     filenames.push_back(item.filename);
-        // }
-        // vector<fileProp> allReadinFiles;
-        // FileCopyE2ECheck(filenastiness, tarDir, allReadinFiles, filenames);
-    
-        // for (long unsigned int index = 0; index < allReadinFiles.size(); index++){
-        //     for (int j = 0; j < 20; j++) {
-        //         if (allReadinFiles.at(index).fileSHA1[j] != allArrivedFiles.at(index).fileSHA1[j]){
-        //             cout << "local file [" << allReadinFiles.at(index).filename << "] [";
-        //             printf("%02x", (unsigned int)allReadinFiles.at(index).fileSHA1[j]);
-        //             cout << "] doesn't match original file [" << allArrivedFiles.at(index).filename << "] [";
-        //             printf("%02x", (unsigned int)allArrivedFiles.at(index).fileSHA1[j]);
-        //             cout << "].\n";
-        //         }
-        //     }
-        // }
+        long unsigned int index = 0;
+        while (index < allArrivedFiles.size()){
+            currentfilefail = false;
+            string curfilename = allArrivedFiles.at(index).filename;
+            unordered_map<string, fileProp*>::const_iterator got = TargetFiles.find(curfilename);
+            if (got == TargetFiles.end()) {
+                cout << "can not find local file [" << curfilename << "].\n";
+            }else{
+                for (int j = 0; j < 20; j++) {
+                    if (TargetFiles[curfilename]->fileSHA1[j] != allArrivedFiles.at(index).fileSHA1[j]){
+                        cout << "local file [" << curfilename << "] doesn't match source file.\n";
+                        currentfilefail = true;
+                        break;
+                    }
+                }
+            }
+            if (!currentfilefail) {
+                cout << "successfuly match [" << index+1 << "] files! moving onwards\n";
+            }
+            index++;
+        }
         printf("MISSION COMPLETE!\n");
     } 
     catch (C150NetworkException& e){
-        // Write to debug log
-        c150debug->printf(C150ALWAYSLOG,"Caught C150NetworkException: %s\n",
-                          e.formattedExplanation().c_str());
         // In case we're logging to a file, write to the console too
         cerr << argv[0] << ": caught C150NetworkException: " << e.formattedExplanation() << endl;
     }
 
-
+    return 0;
 }
 
 

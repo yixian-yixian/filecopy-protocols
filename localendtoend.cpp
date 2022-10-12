@@ -4,6 +4,7 @@
 #define BUFSIZE 1024
 const int UPPERBOUND = 1e6;
 using namespace std;
+using namespace C150NETWORK;  // for all the comp150 utilities 
 
 // ------------------------------------------------------
 //
@@ -86,7 +87,7 @@ ssize_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_pt
  */
 void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFilesProp_addr, vector<string>& filenames)
 {
-    printf("currently in FileCopyE2ECheck\n\n");
+    *GRADING << "Starting FileCopyE2ECheck\n";
     unsigned char* temporaryBuf = nullptr;
     unordered_map<unsigned char*, unsigned char*> umSha1content; 
     int iteration = 0;
@@ -105,6 +106,7 @@ void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFil
             unordered_map<unsigned char*, unsigned char*>::const_iterator got = umSha1content.find(obuf);
             if (got == umSha1content.end()) { /* SHA1 not previously present */
                 umSha1content[obuf] = temporaryBuf; /* add SHA1 for this read into table */
+                *GRADING << "File: <" << filenames[i] << "> end-to-end check succeeded, attempt <"; 
             } else{ /* same SHA1 for correct file identified from table */
                 /* initialize fileProp object based on the current filename, 
                 content and totalBytes read */
