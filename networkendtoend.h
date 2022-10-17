@@ -39,5 +39,7 @@ void FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vecto
 void FileReceiveE2ECheck(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles);
 bool readSizefromSocket(C150DgmSocket& sock, size_t bytestoRead, char** bytes_storage);
 
+void formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf);
+
 
 #endif

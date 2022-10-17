@@ -18,6 +18,15 @@ using namespace C150NETWORK;  // for all the comp150 utilities
 void printSHA1(unsigned char *partialSHA1dup);
 void parseHeaderField(unsigned char *receivedBuf);
 
+
+typedef struct header_info{
+    unsigned char filenameSHA1[20];
+    unsigned char contentSHA1[20];
+    size_t contentSize;
+    char filename_str[256];  // no filename can have length higher than 255
+
+} *Socket_Header;
+
 /* * * * * *  * * * * * * * * * *  NETWORK CLIENT FUNCTIONS  * * * * * * * * * * * * * * * */
 void 
 FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vector<string>& filenames)
@@ -49,73 +58,32 @@ FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vector<str
 void 
 formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf)
 { 
-    // compute filename's Sha1
-    unsigned char fnsha1[20];
-    ssize_t filenameSize = singleFile.filename.size();
-    SHA1((unsigned char*)singleFile.filename.c_str(), filenameSize, fnsha1);
-    // populate info into stringstream
-    stringstream headerSS;
-    headerSS << singleFile.filename << "\n";
-    headerSS << fnsha1 << "\n";
-    headerSS << singleFile.contentSize << "\n";
-    headerSS << singleFile.fileSHA1 << "\n";
-    string header = headerSS.str();
-    cout << header << "\n\n";
-    const char* h = header.c_str();
-    ssize_t totalBufSize = header.size();
-    char *generateBuf = (char*)malloc((totalBufSize+1) * sizeof(unsigned char));
-    strcpy(generateBuf, h);
-    *requestBuf = (unsigned char*)generateBuf;
-    printSHA1(fnsha1);
-    printSHA1(singleFile.fileSHA1);
+    // find the filename size
+    size_t filname_size = (singleFile.filename).size();
+    // calculate filenameSHA1
+    unsigned char nameSHA1[20];
+    SHA1((unsigned char*)singleFile.filename.c_str(), filname_size, nameSHA1);
+    // assign information into each field
+    Socket_Header header = (Socket_Header)malloc(sizeof(struct header_info));
+    memcpy((void *)header->filenameSHA1, (void *)nameSHA1, 20);
+    memcpy((void *)header->contentSHA1, (void *)singleFile.fileSHA1, 20);
+    header->contentSize = singleFile.contentSize;
+    // memcpy((void *)header->filename_str, (void *)singleFile.filename.c_str(), filname_size);
+    strcpy(header->filename_str, (const char*)singleFile.filename.c_str());
+    *requestBuf = (unsigned char *)malloc(sizeof(*header) * sizeof(unsigned char));
+    memcpy(*requestBuf, header, sizeof(struct header_info));
     parseHeaderField(*requestBuf);
+     
 }
 
 void 
-parseHeaderField(unsigned char *receivedBuf){
-    // filename, filenameSHA1, content size, contentSHA1 
-    printf("inside parseHeader Field \n");
-
-    // read filename
-    char filename_str[50];
-    memset(filename_str, '\0', 50);
-    sscanf((const char*)receivedBuf, "%[^\n]", filename_str);
-    cout << filename_str << " is the file name" << endl;
-
-    char *first_new_line = strstr((char *)receivedBuf, "\n");
-    char *second_new_line = strstr((char *)first_new_line, "\n");
-    char *third_new_line = strstr((char *)second_new_line, "\n");
-    char *last_new_line = strstr((char *)third_new_line, "\n"));
-
-    // read filename SHA1
-    char filenameSHA1[20];
-    strncpy(filenameSHA1, (const char*)(first_new_line + 1), 20);
-    unsigned char real_fileSHA1[20];
-    for (int i = 0; i < 20 ; i ++) {
-        real_fileSHA1[i] = (unsigned)filenameSHA1[i];
-    }
-    printSHA1(real_fileSHA1);
-
-    // read content size
-   char contentSize[50];
-   memset(contentSize, '\0', 50);
-   strncpy(contentSize, (const char*)(second_new_line + 1), third_new_line - second_new_line);
-//    printf("file name length is [%ld]\n", strlen(filename_str));
-//    sscanf((const char*)receivedBuf + 22 + strlen(filename_str), "%[^\n]", contentSize);
-   cout << atoi(contentSize) << " is the content size" << endl;
-   printf("content size length is [%ld]\n", strlen(contentSize));
-
-
-//     // read content SHA1 
-//     char fileSHA1[20];
-//     strncpy(fileSHA1, (const char*)(receivedBuf + strlen(filename_str) + 23 + strlen(contentSize)), 20);
-//     // sscanf((const char*)receivedBuf + 20 + strlen(filename_str) + strlen(contentSize),"%[^\n]", fileSHA1);
-//     unsigned char real_contentSHA1[20];
-//     for (int i = 0; i < 20 ; i ++) {
-//         real_contentSHA1[i] = (unsigned)fileSHA1[i];
-//     }
-//     printSHA1(real_contentSHA1);
-
+parseHeaderField(unsigned char *receivedBuf)
+{
+    cout << "parse header field " << endl;
+    Socket_Header header = (Socket_Header)malloc(sizeof(struct header_info));
+    memcpy((void *)header, receivedBuf, sizeof(struct header_info));
+    printSHA1(header->filenameSHA1);
+    cout << header->filename_str << endl;
     
 }
 
