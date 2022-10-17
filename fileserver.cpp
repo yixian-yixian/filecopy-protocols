@@ -54,7 +54,7 @@
 #include "c150nastydgmsocket.h"
 #include "c150nastyfile.h"
 #include "localendtoend.h"
-#include "networkendtoend.h"
+#include "servernetwork.h"
 #include "c150grading.h"
 #include <fstream>
 #include <cstdlib> 
@@ -87,7 +87,6 @@ main(int argc, char *argv[])
     networknastiness = atoi(argv[1]);
     filenastiness = atoi(argv[2]);   // convert command line string to integer
     string tarDir = argv[3];
-    printf("current filenastiness %d\n", filenastiness);
 
 
     // Set up socket for listening mode 
@@ -114,24 +113,27 @@ main(int argc, char *argv[])
         while (index < allArrivedFiles.size()){
             currentfilefail = false;
             string curfilename = allArrivedFiles.at(index).filename;
+            *GRADING << "File: <" << curfilename << "> received, beginning end-to-end check." << endl;
             unordered_map<string, fileProp*>::const_iterator got = TargetFiles.find(curfilename);
             if (got == TargetFiles.end()) {
-                cout << "can not find local file [" << curfilename << "].\n";
+                *GRADING << "File: <" << curfilename << "> was not found in the target directory." << endl;
+                *GRADING << "File: <" << curfilename << "> end-to-end check failed." << endl;
             }else{
                 for (int j = 0; j < 20; j++) {
                     if (TargetFiles[curfilename]->fileSHA1[j] != allArrivedFiles.at(index).fileSHA1[j]){
-                        cout << "local file [" << curfilename << "] doesn't match source file.\n";
+                        *GRADING << "File: <" << curfilename << "> end-to-end check failed." << endl;
                         currentfilefail = true;
                         break;
                     }
                 }
             }
             if (!currentfilefail) {
-                cout << "successfuly match [" << index+1 << "] files! moving onwards\n";
+                *GRADING << "File: <" << curfilename << "> end-to-end check succeeded." << endl;
             }
             index++;
         }
-        printf("MISSION COMPLETE!\n");
+        // printf("MISSION COMPLETE!\n");
+        *GRADING << "Complete a total of <"  << allArrivedFiles.size() << "> files end-to-end check." << endl;
     } 
     catch (C150NetworkException& e){
         // In case we're logging to a file, write to the console too

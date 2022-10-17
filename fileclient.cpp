@@ -41,7 +41,7 @@
 #include "c150nastyfile.h"
 #include "c150grading.h"
 #include "localendtoend.h"
-#include "networkendtoend.h"
+#include "servernetwork.h"
 
 using namespace std;          // for C++ std library
 using namespace C150NETWORK;  // for all the comp150 utilities
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
     // Variable declarations
     //
     int filenastiness;
-    // int networknastiness;
+    int networknastiness;
 
     //
     // Make sure command line looks right
@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
         exit(4);
     }
     filenastiness = atoi(argv[filenastyArg]);
-    // networknastiness = atoi(argv[netnastyArg]);
+    networknastiness = atoi(argv[netnastyArg]);
     string srcdir = argv[srcdirArg];
 
     // end to end check from local to socket
@@ -106,30 +106,30 @@ int main(int argc, char *argv[]) {
     vector<fileProp> allFilesProp;
     *GRADING << "Starting FileCopyE2ECheck\n";
     FileCopyE2ECheck(filenastiness, srcdir, allFilesProp, filenames);
-    for (long unsigned int index = 0; index < allFilesProp.size(); index++){
-        unsigned char* address;
-        formatRequestBuf(allFilesProp.at(index), &address);
-    }
+    // for (long unsigned int index = 0; index < allFilesProp.size(); index++){
+    //     unsigned char* address;
+    //     formatRequestBuf(allFilesProp.at(index), &address);
+    // }
     *GRADING << "Finished FileCopyE2ECheck\n";
 
-    // // end to end check from socket to socket
-    // try {
-    //     // Create the socket
-    //     C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
+    // end to end check from socket to socket
+    try {
+        // Create the socket
+        C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
 
-    //     // Tell the DGMSocket which server to talk to
-    //     sock -> setServerName(argv[serverArg]);
-    //     sock -> turnOnTimeouts(5000);
+        // Tell the DGMSocket which server to talk to
+        sock -> setServerName(argv[serverArg]);
+        sock -> turnOnTimeouts(5000);
 
-    //     // network e2e check
-    //     FileSendE2ECheck(*sock, allFilesProp, filenames);
-    // }
-    // //
-    // //  Handle networking errors -- for now, just print message and give up!
-    // //
-    // catch (C150NetworkException& e) {
-    //     // In case we're logging to a file, write to the console too
-    //     cerr << argv[0] << ": caught C150NetworkException: " << e.formattedExplanation() << endl;
-    // }
+        // network e2e check
+        FileSendE2ECheck(*sock, allFilesProp, filenames);
+    }
+    //
+    //  Handle networking errors -- for now, just print message and give up!
+    //
+    catch (C150NetworkException& e) {
+        // In case we're logging to a file, write to the console too
+        cerr << argv[0] << ": caught C150NetworkException: " << e.formattedExplanation() << endl;
+    }
     return 0;
 }
