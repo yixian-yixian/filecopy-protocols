@@ -52,7 +52,7 @@ ssize_t ReadaFile(C150NETWORK::C150NastyFile *targetFile, unsigned char **buf_pt
 void GetFileNames(vector<string>& filenames, string tardir);
 void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFilesProp_addr, vector<string>& filenames);
 string makeFileName(string dir, string name);
-
+void WriteaFile(fileProp& curFile, int filenastiness, string tardir);
 
 #endif
 

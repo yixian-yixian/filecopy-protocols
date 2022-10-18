@@ -88,11 +88,15 @@ parseHeaderField(unsigned char *receivedBuf, fileProp& received_file, bool& last
 
 
 void 
-FileReceiveE2ECheck(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles)
+FileReceiveE2ECheck(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles, int filenastiness, string tardir)
 {
     *GRADING << "Begining to receive whole files from client." << endl; 
+    bool last_file_should_break = false;
     while (1){
-        if (readfromSrc(sock, allArrivedFiles)) break;
+        last_file_should_break = readfromSrc(sock, allArrivedFiles);
+        WriteaFile(allArrivedFiles.back(), filenastiness, tardir);
+        if (last_file_should_break) break;
+        
     }
     *GRADING << "Received and successfully read a total of " << allArrivedFiles.size() << " files from client." << endl;
 }
@@ -152,7 +156,7 @@ readPackets(C150DgmSocket& sock, vector<unsigned char>& temporaryFileContent, bo
             return false;
         }
         // move the content into vector
-        for(unsigned int t = 0; t < chunk; t ++) {
+        for(unsigned int t = 0; t < chunk; t++) {
             temporaryFileContent.push_back(*(temporaryBuf + t));
         }
         bzero(temporaryBuf, chunk);
@@ -180,16 +184,16 @@ readContentfromSocket(C150DgmSocket& sock, int contentlen, unsigned char** read_
 {
     vector<unsigned char> allFileContent; /* dynamically expanded memory for all content bytes */
     vector<unsigned char> temporaryFileV;
-    /* totalBytes */
+    /* totalBytes: total bytes read for the file */
     ssize_t totalBytes = 0, curBytes = 0;
     unsigned char* temporaryBuf;
     bool last_packets = false;
     // int readtimes = 0;
     /* read from socket in unit of 10 packets */
     while (totalBytes != contentlen) { /* read until all bytes from sockets are received */
-        if (readPackets(sock, temporaryFileV, last_packets)) { // read 10 packets SHA1 
+        if (readPackets(sock, temporaryFileV, last_packets)) { // received 10 packets to calculate partial SHA1 
             curBytes = temporaryFileV.size();
-            if (last_packets){
+            if (last_packets) {
                 sock.write(ACK, strlen(ACK));
                 allFileContent.insert(allFileContent.end(), temporaryFileV.begin(), temporaryFileV.end());
                 totalBytes += curBytes;
@@ -198,9 +202,11 @@ readContentfromSocket(C150DgmSocket& sock, int contentlen, unsigned char** read_
             }
             char *partialSHA1_tmp = (char*)malloc(SHA_MSG * sizeof(char));
             if (!readSizefromSocket(sock, SHA_MSG, &partialSHA1_tmp)){ 
-                sock.write(REJ, strlen(REJ)); // read partial SHA1
+                sock.write(REJ, strlen(REJ)); // receiving partial SHA1 failed 
                 temporaryFileV.clear();
-                continue;}
+                cerr << "Receiving partial SHA1 failed " << endl;
+                continue;
+            }
             unsigned char provided_SHA1[20];
             for (int i = 0; i < 20; i++) {
                 provided_SHA1[i] = (unsigned char)partialSHA1_tmp[i];
@@ -215,6 +221,7 @@ readContentfromSocket(C150DgmSocket& sock, int contentlen, unsigned char** read_
                 *GRADING << "The received bytes SHA1 do not match, requesting resend." << endl;
                 sock.write(REJ, strlen(REJ));
                 temporaryFileV.clear();
+                cerr << "should be starting next iteration \n";
                 continue;
             } else { // everything successful 
                 sock.write(ACK, strlen(ACK));
@@ -222,6 +229,7 @@ readContentfromSocket(C150DgmSocket& sock, int contentlen, unsigned char** read_
                 totalBytes += curBytes;
                 temporaryFileV.clear();
             }
+            cerr << "following an ACK sent\n";
         } else {
             // returned False read_packets have already cleaned the vector
             sock.write(REJ, strlen(REJ));
@@ -268,18 +276,18 @@ readfromSrc(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles)
     cout << "error after line 383 " << endl;
     /* evaluate conditions to send ACK or REJ */
     if (sock.timedout()) { 
-        cerr << "timed out error in write" << endl;
+        cerr << "timed out error in receiving header" << endl;
         sock.write(REJ, strlen(REJ));
         return false;
     }
     /*1ACK-receive header information and correct filenameSHA1 */
-    if (parseHeaderField(fileHeader, fileInfo, lastfile))
+    if (!parseHeaderField(fileHeader, fileInfo, lastfile))
     {
-        sock.write(ACK, strlen(ACK));
-    }else{
+        cout << "header filename is corrupted\n" << endl;
         sock.write(REJ, strlen(REJ));
-        return false;
+        return false;   
     }
+    sock.write(ACK, strlen(ACK));
 
     /* 2ACK-receive content from client */
     /* many ACKs for receiving contents in packets and with correct SHA1 */
@@ -291,17 +299,21 @@ readfromSrc(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles)
         free(prod);
         return false;
     }
+    /* calculate SHA1 for the entire file */
     *GRADING << "File: <" << fileInfo.filename << "> succeed at socket to socket check with receiving the entire content." << endl;
     unsigned char *obuf = (unsigned char*)malloc(SHA_MSG * sizeof(unsigned char));
     SHA1((const unsigned char *)prod, contentlen, obuf);
 
-    /*9ACK-check consistency in received and calculated SHA1 to client */
+    /*4 ACK-check consistency in received and calculated SHA1 to client 
+     * total size is compared in readContentfromSocket 
+     */
     if (!compareSHA1(obuf, fileInfo.fileSHA1)) {
         sock.write(REJ, strlen(REJ));
         *GRADING << "File: <" << fileInfo.filename << "> socket to socket failed at inconsistency in received and calculated content SHA1." << endl;
         return false;
     }
-    sock.write(ACK, strlen(ACK)); /* log for purpose of recording failure caused by network nastiness */
+    sock.write(ACK, strlen(ACK)); 
+    /* log for purpose of recording failure caused by network nastiness */
     *GRADING << "File: <" << fileInfo.filename << ">  succeed at socket to socket check with consistency in size and SHA1 of the content." << endl;
     fileInfo.contentbuf = prod;
     allArrivedFiles.push_back(fileInfo);

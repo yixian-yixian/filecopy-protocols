@@ -95,7 +95,7 @@ main(int argc, char *argv[])
         C150DgmSocket *sock = new C150NastyDgmSocket(networknastiness);
         sock -> turnOnTimeouts(5000);
         vector<fileProp> allArrivedFiles;
-        FileReceiveE2ECheck(*sock, allArrivedFiles);
+        FileReceiveE2ECheck(*sock, allArrivedFiles, filenastiness, tarDir);
 
         bool currentfilefail = false;
         unordered_map<string, fileProp*> TargetFiles;
