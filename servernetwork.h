@@ -38,7 +38,7 @@ bool readfromSrc(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles);
 void FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vector<string>& filenames);
 void FileReceiveE2ECheck(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles);
 bool readSizefromSocket(C150DgmSocket& sock, size_t bytestoRead, char** bytes_storage);
-void formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf);
-bool parseHeaderField(unsigned char *receivedBuf, fileProp& received_file);
+void formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf, bool lastfile);
+bool parseHeaderField(unsigned char *receivedBuf, fileProp& received_file, bool& lastfile);
 
 #endif
