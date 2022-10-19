@@ -22,6 +22,7 @@ typedef struct header_info{
     unsigned char contentSHA1[20];
     char filename_str[256]; // no filename can have length higher than 255
     size_t contentSize;
+    size_t status;
 } *Socket_Header;
 
 
@@ -53,7 +54,7 @@ FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vector<str
  * notes: N/A
  */
 void 
-formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf)
+formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf, bool lastfile)
 { 
     // find the filename size
     size_t filname_size = (singleFile.filename).size();
@@ -63,14 +64,20 @@ formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf)
     // assign information into each field
     Socket_Header header = (Socket_Header)malloc(sizeof(struct header_info));
     memcpy((void *)header->filenameSHA1, (void *)nameSHA1, 20);
-    printSHA1(header->filenameSHA1);
     memcpy((void *)header->contentSHA1, (void *)singleFile.fileSHA1, 20);
     header->contentSize = singleFile.contentSize;
     strcpy(header->filename_str, (const char*)singleFile.filename.c_str());
+    if (lastfile){ header->status = 1;}
+    else{ header->status = 0;}
     // copy information into sending buffer
     *requestBuf = (unsigned char *)malloc(sizeof(*header) * sizeof(unsigned char));
     cerr << "before memcpy information "<< endl;
     memcpy(*requestBuf, header, sizeof(struct header_info));
+        cout << "filename ";
+    printSHA1(header->filenameSHA1);
+        cout << "file content ";
+    printSHA1(header->contentSHA1);
+    free(header);
 }
 
 /* ServerRESCheck 
@@ -113,64 +120,62 @@ ServerRESCheck(C150DgmSocket& sock, unsigned& iteration)
 bool 
 sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned& iteration, bool& lastfile, string filename)
 {
-    // Wrap file info into a header
-    unsigned char* headInfo;
-    formatRequestBuf(file, &headInfo);
+    // // Wrap file info into a header
+    // unsigned char* headInfo;
+    // formatRequestBuf(file, &headInfo, lastfile);
 
-    // Send the header to server
-    sock.write((const char*)headInfo, sizeof(struct header_info));
-    
-    // Check if the header is sent successfully and whether the filenameSha1 matches
-    if (!ServerRESCheck(sock, iteration)){
-        *GRADING << "File: <" << filename << ">, failed at sending filename, attempt <" << iteration + 1 << ">\n";
-        return false;
-    }
-    
-    // send Content 
-    ssize_t ByteSent = 0;
-    int sendtimes = 0;
-    ssize_t CurByteSent = 0;
-    while (ByteSent < file.contentSize){
-        if (sendtimes == 10){
-            unsigned char pobuf[20];
-            SHA1((const unsigned char*)(file.contentbuf + ByteSent - CurByteSent), CurByteSent, pobuf);
-            sock.write((const char*)pobuf, 21);
-            if (!ServerRESCheck(sock, iteration)){return false;}
-            if (!ServerRESCheck(sock, iteration)){return false;}
-            CurByteSent = 0;
-            sendtimes = 0;
-        }
-        if (ByteSent + WRITESIZE > file.contentSize){
-            sock.write((const char*)(file.contentbuf + ByteSent), file.contentSize - ByteSent);
-            CurByteSent += file.contentSize - ByteSent;
-            ByteSent += file.contentSize - ByteSent;
-        }else{
-            sock.write((const char*)(file.contentbuf + ByteSent), WRITESIZE);
-            CurByteSent += WRITESIZE;
-            ByteSent += WRITESIZE;
-        }
-        sendtimes++;
-    }
+    // // Send the header to server
+    // sock.write((const char*)headInfo, sizeof(struct header_info));
+    // free(headInfo);
 
-    // check Content sent successfully
-    if (!ServerRESCheck(sock, iteration)){
-        *GRADING << "File: <" << filename << ">, failed at sending file's content, attempt <" << iteration + 1 << ">\n";
-        return false;
-    }
-
-    // check size is equal
-    if (!ServerRESCheck(sock, iteration)){
-        *GRADING << "File: <" << filename << ">, failed at matching file's size, attempt <" << iteration + 1 << ">\n";
-        return false;
-    }
+    // // Check if the header is sent successfully and whether the filenameSha1 matches
+    // if (!ServerRESCheck(sock, iteration)){
+    //     *GRADING << "File: <" << filename << ">, failed at sending filename, attempt <" << iteration + 1 << ">\n";
+    //     return false;
+    // }
     
-    // check sha1 is equal
-    if (!ServerRESCheck(sock, iteration)){
-        *GRADING << "File: <" << filename << ">, failed at matching SHA1 for file's content, attempt <" << iteration + 1 << ">\n";
-        return false;
-    }
+    // // send Content 
+    // ssize_t ByteSent = 0;
+    // int sendtimes = 0;
+    // ssize_t CurByteSent = 0;
+    // unsigned retryNum = 0;
+    // while (ByteSent < file.contentSize){
+    //     if (sendtimes == 10){
+    //         unsigned char pobuf[20];
+    //         SHA1((const unsigned char*)(file.contentbuf + ByteSent - CurByteSent), CurByteSent, pobuf);
+    //         sock.write((const char*)pobuf, 20);
+    //         if (!ServerRESCheck(sock, retryNum)) {
+    //             // if (retryNum != 50){
+    //             //     ByteSent -= CurByteSent;
+    //             //     CurByteSent = 0;
+    //             //     sendtimes = 0;
+    //             //     continue;
+    //             // }
+    //             retryNum = 0;
+    //             return false;
+    //         }
+    //         CurByteSent = 0;
+    //         sendtimes = 0;
+    //     }
+    //     if (ByteSent + WRITESIZE > file.contentSize){
+    //         sock.write((const char*)(file.contentbuf + ByteSent), file.contentSize - ByteSent);
+    //         CurByteSent += file.contentSize - ByteSent;
+    //         ByteSent += file.contentSize - ByteSent;
+    //     }else{
+    //         sock.write((const char*)(file.contentbuf + ByteSent), WRITESIZE);
+    //         CurByteSent += WRITESIZE;
+    //         ByteSent += WRITESIZE;
+    //     }
+    //     sendtimes++;
+    // }
     
-    *GRADING << "File: <" << filename << ">, transmission complete, waiting for end-to-end check, attempt <" << iteration + 1 << ">\n";
+    // // check sha1 is equal
+    // if (!ServerRESCheck(sock, iteration)){
+    //     *GRADING << "File: <" << filename << ">, failed at matching SHA1 for file's content, attempt <" << iteration + 1 << ">\n";
+    //     return false;
+    // }
+    
+    // *GRADING << "File: <" << filename << ">, transmission complete, waiting for end-to-end check, attempt <" << iteration + 1 << ">\n";
     return true;
 }
 
