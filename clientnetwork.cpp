@@ -15,8 +15,8 @@
 using namespace std;
 using namespace C150NETWORK;  // for all the comp150 utilities
 
-bool ServerRESCheck(C150DgmSocket& sock, vector<Packet_ptr>* curFileCont);
-bool sendtoTar(C150DgmSocket& sock, fileProp& file);
+bool ServerRESCheck(C150DgmSocket& sock, vector<Packet_ptr>* curFileCont, unsigned int curFileIndex);
+bool sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned int curFileIndex);
 void printSHA1(unsigned char *partialSHA1dup);
 
 void 
@@ -26,10 +26,9 @@ FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vector<str
     for (long unsigned int index = 0; index < allFilesProp.size(); index++)
     {
         *GRADING << "File: <" << filenames.at(index) << ">, beginning transmission, attempt <0>\n";
-        sendtoTar(sock, allFilesProp.at(index));
+        sendtoTar(sock, allFilesProp.at(index), index);
         *GRADING << "File: <" << filenames.at(index) << "> transmission complete, waiting for end-to-end check, attempt <0>\n";
     }
-
 }
 
 /* ServerRESCheck 
@@ -40,7 +39,7 @@ FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vector<str
  * notes: N/A
  */
 bool 
-ServerRESCheck(C150DgmSocket& sock, vector<Packet_ptr>* curFileCont)
+ServerRESCheck(C150DgmSocket& sock, vector<Packet_ptr>* curFileCont, unsigned int curFileIndex)
 {
     unsigned char *response = (unsigned char*) malloc(sizeof(struct Packet)); 
     sock.read((char*)response, sizeof(struct Packet));
@@ -61,7 +60,9 @@ ServerRESCheck(C150DgmSocket& sock, vector<Packet_ptr>* curFileCont)
         }else if (pktRes->packet_status == FILENAME_P){
             sock.write((const char*) (curFileCont->at(0)), sizeof(struct Packet));
             return false;
-        }
+        }else if (pktRes->packet_status / 10 == curFileIndex && pktRes->packet_status % 10 == COMPLETE){
+            return true;
+        }else {return false;}
     }
     return true;
 
@@ -79,7 +80,7 @@ ServerRESCheck(C150DgmSocket& sock, vector<Packet_ptr>* curFileCont)
  *        false: file fails to be sent and update iteration by 1
  */
 bool 
-sendtoTar(C150DgmSocket& sock, fileProp& file)
+sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned int curFileIndex)
 {
     // Wrap file info into a header
     cout << "start sending file[" << file.filename << "]\n";
@@ -90,11 +91,11 @@ sendtoTar(C150DgmSocket& sock, fileProp& file)
         sock.write((const char*) (curFileCont->at(index)), sizeof(struct Packet));
     }
     cout << "finished sending all packets of file[" << file.filename << "] once\n";
-    cout << "start checking and resending missing packets of file[" << file.filename << "]\n";
+    cout << "start checking and resending missing packets of file[" << file.filename << "] current file index is [" << curFileIndex << "]\n";
     clock_t start_t, end_t;
     start_t = clock();
     // Check if the header is sent successfully and whether the filenameSha1 matches
-    while(!ServerRESCheck(sock, curFileCont)){        
+    while(!ServerRESCheck(sock, curFileCont, curFileIndex)){        
         end_t = clock();
         if ((double(end_t - start_t) / CLOCKS_PER_SEC) > 30){ /* maximum 10 minutes span for retry */
             printf("have waiting over 30 seconds\n");

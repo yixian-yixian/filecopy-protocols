@@ -1,4 +1,6 @@
 #include "servernetwork.h"
+#include "localendtoend.h"
+
 
 #define PACKET_SIZE 490
 #define ACK "ACK"
@@ -19,10 +21,10 @@ using namespace C150NETWORK;  // for all the comp150 utilities
 void printSHA1(unsigned char *partialSHA1dup);
 void parseHeaderField(unsigned char *receivedBuf);
 bool compareSHA1(unsigned char* receivedSHA1, unsigned char* calculateSHA1);
-bool recv_one_file(C150DgmSocket& sock, size_t curr_file_index, vector<string> all_file_names, unordered_map<size_t, Packet_ptr>& one_file_contents);
+bool recv_one_file(C150DgmSocket& sock, size_t curr_file_index, vector<string> all_file_names, unordered_map<size_t, Packet_ptr>& one_file_contents, uint32_t& total_file);
 bool readSizefromSocket(C150DgmSocket& sock, size_t bytestoRead, char** bytes_storage);
 bool read_one_packet(C150DgmSocket& sock, size_t curr_file_index, bool& endpacketfound, size_t& maximum_packets, unordered_map<size_t, Packet_ptr>& one_file_contents, vector<string>& all_File_names);
-void resend_confirmation(C150DgmSocket& sock, size_t curr_file_index);
+void resend_confirmation(C150DgmSocket& sock, size_t curr_file_index, size_t total_file);
 Packet_ptr unpack_packet(unsigned char *receivedBuf);
 
 /* * * * * *  * * * * * * * * * *  NETWORK SERVER FUNCTIONS  * * * * * * * * * * * * * * * */
@@ -47,21 +49,21 @@ FileReceiveE2ECheck(C150DgmSocket& sock, int filenastiness, string tardir)
     unordered_set<uint32_t> all_files_arrived;
     vector<string> all_file_names;
     size_t curr_sequence_number = 0;
-    char *recv_complete_confirmation =  (char *)malloc(BUFSIZE);
     read_Start(sock);
+    uint32_t total_file = 0; 
     while(1) {
         cerr << "RECV: starting to receive one packet\n";
         unordered_map<size_t, Packet_ptr> curr_file_contents;
-        if (recv_one_file(sock, curr_sequence_number, all_file_names, curr_file_contents)) {
+        if (recv_one_file(sock, curr_sequence_number, all_file_names, curr_file_contents, total_file)) {
+
             printf("completely read a file \n");
             /* completely received the whole file */
         }
         curr_sequence_number++;
-        Packet_ptr confirm = (Packet_ptr) malloc(sizeof(struct Packet));
-        readSizefromSocket(sock, BUFSIZE, &recv_complete_confirmation); 
-        memcpy((void *)confirm, (void *)recv_complete_confirmation, BUFSIZE);
-        if (confirm->packet_status == COMPLETE) break;
+        if (curr_sequence_number == total_file) break;
+
     }  
+    
     *GRADING << "Received and successfully read a total of " << all_file_names.size() << " files from client." << endl;
 }
 
@@ -158,13 +160,12 @@ write_missing_packets(C150DgmSocket& sock, vector<size_t>& missing_packets)
 
 
 bool 
-recv_one_file(C150DgmSocket& sock, size_t curr_file_index, vector<string> all_file_names, unordered_map<size_t, Packet_ptr>& one_file_contents)
+recv_one_file(C150DgmSocket& sock, size_t curr_file_index, vector<string> all_file_names, unordered_map<size_t, Packet_ptr>& one_file_contents, uint32_t& total_file)
 {
     clock_t start_t, end_t;
     start_t = clock();
-    // char filename[256];
     bool endpacketfound = false;
-    bool is_timed_out = false, recv_complete = false;
+    bool is_timed_out = false, recv_complete = false, totalfilefound = false;
     size_t maximum_packets;
     while (1) {
         is_timed_out = read_one_packet(sock, curr_file_index, endpacketfound, maximum_packets, one_file_contents, all_file_names); 
@@ -173,6 +174,10 @@ recv_one_file(C150DgmSocket& sock, size_t curr_file_index, vector<string> all_fi
             printf("have waiting over 30 seconds\n");
             break; }
         if (is_timed_out){
+            if (!totalfilefound && one_file_contents.size() > 0){
+                    auto access_directory_size = one_file_contents.begin();
+                    total_file = access_directory_size->second->totalFileNum; 
+                    totalfilefound = true; }
             if (!endpacketfound) {
                 // TODO send to client resent end packet 
                 printf("MISS: end packet was not received \n");
@@ -190,28 +195,36 @@ recv_one_file(C150DgmSocket& sock, size_t curr_file_index, vector<string> all_fi
             }
         }
     }
-    resend_confirmation(sock, curr_file_index);
+    resend_confirmation(sock, curr_file_index, total_file);
     return recv_complete;
 }
 
 
 void
-resend_confirmation(C150DgmSocket& sock, size_t curr_file_index){
+resend_confirmation(C150DgmSocket& sock, size_t curr_file_index, size_t total_file){
     Packet_ptr complete_notice = (Packet_ptr)calloc(sizeof(struct Packet), 1);
-    complete_notice->packet_status = COMPLETE;
     bool good_to_go = false;
     char *receivedBuf = (char *)malloc(sizeof(struct Packet));
+    int timeoutNum = 0;
     while(!good_to_go) {
+        bzero(complete_notice, sizeof(struct Packet));
+        complete_notice->packet_status = pack_status(curr_file_index, COMPLETE);
         sock.write((const char*)complete_notice, sizeof(struct Packet));
-        cerr << "START RESEND loop\n";
+        cerr << "START RESEND ["<< complete_notice->packet_status << "]loop\n";
         bzero(receivedBuf, sizeof(struct Packet));
+        if (timeoutNum > 10){ 
+            if (curr_file_index + 1 == total_file) { good_to_go = true; }
+        }
         bool succ_read = readSizefromSocket(sock, BUFSIZE, &receivedBuf);
         if (!succ_read){
+            cerr << "TOTAL: " << total_file << endl;
+            cerr << "CURR: " << curr_file_index << endl;
             complete_notice = unpack_packet((unsigned char*)receivedBuf);
             if (complete_notice->packet_status / 10 > curr_file_index){
                 good_to_go = true;
-            }
-        }
+            } 
+        }else {timeoutNum++;}
+
     }
 }
 

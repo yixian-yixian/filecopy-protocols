@@ -129,18 +129,20 @@ ReadAPacket(C150NETWORK::C150NastyFile& targetFile, Packet_ptr currPacket, size_
  * return: total number of bytes read from the file object
  * notes: *buf_ptr is udpated to point to the read in file content       
  */
-size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& allFileContent, string srcFileName, unsigned int fileindex)
+size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& allFileContent, string srcFileName, unsigned int fileindex, string trueFilename, uint32_t totalFileNum)
 {
     size_t readedBytes = 0, curr_seq = 0, totalBytes = 0;
     Packet_ptr namePacket = (Packet_ptr)calloc(sizeof(struct Packet), 1);
     namePacket->packet_status = pack_status(fileindex, 2);
-    strncpy((char *)namePacket->content, srcFileName.c_str(), srcFileName.size());
-    namePacket->seqNum = srcFileName.size();
+    strncpy((char *)namePacket->content, trueFilename.c_str(), trueFilename.size());
+    namePacket->seqNum = trueFilename.size();
+    namePacket->totalFileNum = totalFileNum;
     allFileContent.push_back(namePacket);
 
     while(1) { // read until the end
         /* initialize a packet for next read */
         Packet_ptr currPacket = (Packet_ptr)calloc(sizeof(struct Packet), 1);
+        currPacket->totalFileNum = totalFileNum;
         /* read a packet */
         readedBytes = ReadAPacket(targetFile, currPacket, curr_seq, srcFileName);
         totalBytes += readedBytes;
@@ -176,7 +178,7 @@ void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFil
         C150NETWORK::C150NastyFile C150NF = C150NETWORK::C150NastyFile(filenastiness);
         string sourceFileName = makeFileName(srcdir, filenames[i]);
         vector<Packet_ptr> *singleFilePkt = new vector<Packet_ptr>;
-        readedBytes = ReadaFile(C150NF, *singleFilePkt, sourceFileName, i);
+        readedBytes = ReadaFile(C150NF, *singleFilePkt, sourceFileName, i, filenames[i], filenames.size());
         temporaryBuf = (unsigned char*) calloc((readedBytes + 1), sizeof(unsigned char));
         for (long unsigned int index = 1; index < singleFilePkt->size() - 1; index++){
             /* copy over bytes in each packet except for last packet */
