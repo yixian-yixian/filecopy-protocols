@@ -34,10 +34,14 @@
 #include <iostream>               // for cout
 #include <fstream>                // for input files
 
+enum Packet_Status{ REG_PACK = 0, LAST_PACK = 1, FILENAME_P = 2, RECV_FILE = 3, MISS_FILE = 4, COMPLETE = 5, START = 6};
+
 typedef struct Packet {
     unsigned char content[490];
     size_t seqNum;
-    uint32_t packet_status;
+    uint32_t packet_status; 
+    /* decimal digit signals property of the packets in a file, 0 signals other content packets, 1 signals the last content packet, 2 signals filename packet */
+    /* status - decimal digit signals the order of the file in directory */
 } *Packet_ptr;
 
 typedef struct fileProp{
@@ -53,13 +57,11 @@ typedef struct fileProp{
     }
 } fileProp;
 
-
-
 void GetFileNames(vector<string>& filenames, string tardir);
 void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFilesProp_addr, vector<string>& filenames);
 string makeFileName(string dir, string name);
 void WriteaFile(fileProp& curFile, int filenastiness, string tardir);
-size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& allFileContent);
+size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& allFileContent, unsigned int fileindex);
 size_t ReadAPacket(C150NETWORK::C150NastyFile& targetFile, Packet_ptr currPacket, size_t& seqNum, string srcFileName);
 #endif
 

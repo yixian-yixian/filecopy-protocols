@@ -23,22 +23,20 @@
 #include "c150debug.h"
 #include "c150grading.h"
 #include <vector>
+#include <tuple>
+#include <queue>
 #include <unordered_map>
 #include <openssl/sha.h>
 #include <cassert>
 #include <dirent.h>
 #include <string>
+#include <unordered_set>
 #include "localendtoend.h"
+
 using namespace std;
 using namespace C150NETWORK;  // for all the comp150 utilities
 
-bool ServerRESCheck(C150DgmSocket& sock);
-bool sendtoTar(C150DgmSocket& sock, fileProp& file, unsigned& iteration, bool& lastfile, string filename);
-bool readfromSrc(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles);
 void FileSendE2ECheck(C150DgmSocket& sock, vector<fileProp>& allFilesProp, vector<string>& filenames);
-void FileReceiveE2ECheck(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles);
-bool readSizefromSocket(C150DgmSocket& sock, size_t bytestoRead, char** bytes_storage);
-void formatRequestBuf(fileProp& singleFile, unsigned char **requestBuf);
-bool parseHeaderField(unsigned char *receivedBuf, fileProp& received_file);
+void FileReceiveE2ECheck(C150DgmSocket& sock, int filenastiness, string tardir);
 
 #endif

@@ -1,5 +1,6 @@
 #include "servernetwork.h"
 
+#define PACKET_SIZE 490
 #define ACK "ACK"
 #define REJ "REJ"
 #define LAST "LAST"
@@ -18,67 +19,200 @@ using namespace C150NETWORK;  // for all the comp150 utilities
 void printSHA1(unsigned char *partialSHA1dup);
 void parseHeaderField(unsigned char *receivedBuf);
 bool compareSHA1(unsigned char* receivedSHA1, unsigned char* calculateSHA1);
+bool recv_one_file(C150DgmSocket& sock, size_t curr_file_index, vector<string> all_file_names, unordered_map<size_t, Packet_ptr>& one_file_contents);
+bool readSizefromSocket(C150DgmSocket& sock, size_t bytestoRead, char** bytes_storage);
+bool read_one_packet(C150DgmSocket& sock, size_t curr_file_index, bool& endpacketfound, size_t& maximum_packets, unordered_map<size_t, Packet_ptr>& one_file_contents, vector<string>& all_File_names);
+void resend_confirmation(C150DgmSocket& sock, size_t curr_file_index);
+Packet_ptr unpack_packet(unsigned char *receivedBuf);
 
+/* * * * * *  * * * * * * * * * *  NETWORK SERVER FUNCTIONS  * * * * * * * * * * * * * * * */
 
-typedef struct header_info{
-    unsigned char filenameSHA1[20];
-    unsigned char contentSHA1[20];
-    char filename_str[256]; // no filename can have length higher than 255
-    size_t contentSize;
-} *Socket_Header;
-
-/* * * * * *  * * * * * * * * * *  NETWORK CLIENT FUNCTIONS  * * * * * * * * * * * * * * * */
-
-  
-bool 
-parseHeaderField(unsigned char *receivedBuf, fileProp& received_file)
+bool
+read_Start(C150DgmSocket& sock)
 {
-    cout << "parse header field " << endl;
-    // casting received 304 bytes into header object 
-    Socket_Header header = (Socket_Header)malloc(sizeof(struct header_info));
-    memcpy((void *)header, receivedBuf, sizeof(struct header_info));
-    // check if filename SHA1 and filename matches 
-    unsigned char *calc_filenameSHA1 = (unsigned char*)malloc(20 * sizeof(unsigned char));
-    SHA1((unsigned char *)header->filename_str, strlen(header->filename_str), calc_filenameSHA1);
-    if (!compareSHA1(calc_filenameSHA1, header->filenameSHA1)){
-        cout << "calculated filnameSHA1" << endl;
-        printSHA1(calc_filenameSHA1);
-        cout << "received filnameSHA1" << endl;
-        printSHA1(header->filenameSHA1);
-        return false;  // error raised with unmatched filename SHA1 
-    } 
-    cout << "after checking filename SHA1 \n";
+    bool startRcv = false;
+    char *receivedBuf = (char *)malloc(sizeof(struct Packet));
+    while(!startRcv){
+        cerr << "START RECV loop\n";
+        bzero(receivedBuf, sizeof(struct Packet));
+        startRcv = readSizefromSocket(sock, BUFSIZE, &receivedBuf) ? false : true;
+    }
+    return startRcv;
+}
 
-    // populate fileProp with received information 
-    memcpy((void *)received_file.fileSHA1, (void *)header->contentSHA1, 20);
-    cout << "recieved file name" << header->filename_str << endl;
-    received_file.contentSize = header->contentSize;
-    cout << header->contentSize << endl;
-    int filename_len = strlen(header->filename_str);
-    cout << "file name size "<< filename_len << endl;
-    char filename_string_arr[256];
-    strncpy(filename_string_arr, header->filename_str, filename_len + 1);
-    cout << "copied file name is  " << filename_string_arr;
-    received_file.filename = string(filename_string_arr);
-    cout << "copied received filename" << received_file.filename << endl;
-    printSHA1(header->contentSHA1);
-    free(header);
-    cout << "copied received filename" << received_file.filename << endl;
-    return true;
+void 
+FileReceiveE2ECheck(C150DgmSocket& sock, int filenastiness, string tardir)
+{
+    *GRADING << "Begining to receive whole files from client." << endl; 
+    unordered_set<uint32_t> all_files_arrived;
+    vector<string> all_file_names;
+    size_t curr_sequence_number = 0;
+    char *recv_complete_confirmation =  (char *)malloc(BUFSIZE);
+    read_Start(sock);
+    while(1) {
+        cerr << "RECV: starting to receive one packet\n";
+        unordered_map<size_t, Packet_ptr> curr_file_contents;
+        if (recv_one_file(sock, curr_sequence_number, all_file_names, curr_file_contents)) {
+            printf("completely read a file \n");
+            /* completely received the whole file */
+        }
+        curr_sequence_number++;
+        Packet_ptr confirm = (Packet_ptr) malloc(sizeof(struct Packet));
+        readSizefromSocket(sock, BUFSIZE, &recv_complete_confirmation); 
+        memcpy((void *)confirm, (void *)recv_complete_confirmation, BUFSIZE);
+        if (confirm->packet_status == COMPLETE) break;
+    }  
+    *GRADING << "Received and successfully read a total of " << all_file_names.size() << " files from client." << endl;
+}
+
+bool 
+check_completeness(C150DgmSocket& sock, unordered_map<size_t, Packet_ptr>& all_file_contents, size_t& total_packets, vector<size_t>& missing_packets)
+{
+    *GRADING << "TOTAL packet " << total_packets << endl;
+    *GRADING << "ALL file content size " << all_file_contents.size() << endl;
+    bool found_file_name = false;
+    unordered_set<size_t> seen_sequence;
+    size_t pop = 0;
+    /* populate a hashset to check for missing packets */
+    while (pop < total_packets) {
+        // cerr << "SEEN_SEQ added " << pop << endl;
+        seen_sequence.insert(pop);
+        pop += 1;
+    }
+    /* iterate through unorder_map to check for missing packet */
+    for(auto& information : all_file_contents) {
+        size_t found_seq = information.first;
+        /* check if file name is found */
+        // cerr << "SEQ is " << found_seq << " \n";
+        if (information.second->packet_status == FILENAME_P){
+            found_file_name = true; }
+        seen_sequence.erase(seen_sequence.find(found_seq));
+    }
+    /* populate missing packets into array */
+    if (seen_sequence.size() == 0 && !found_file_name) {
+        Packet_ptr missing_filename = (Packet_ptr)calloc(sizeof(struct Packet), 1);
+        missing_filename->packet_status = FILENAME_P;
+        sock.write((const char*)missing_filename, sizeof(struct Packet));
+        return true;
+    } 
+    missing_packets.insert(missing_packets.end(), seen_sequence.begin(), seen_sequence.end());
+    return false;
+
+    
+}
+
+
+// return true if timeout, false if not
+bool 
+read_one_packet(C150DgmSocket& sock, size_t curr_file_index, bool& endpacketfound, size_t& maximum_packets, unordered_map<size_t, Packet_ptr>& one_file_contents, vector<string>& all_File_names)
+{
+    bool is_timed_out = false;
+    char filename[250];
+    char *receivedBuf = (char *)malloc(sizeof(struct Packet));
+    is_timed_out = readSizefromSocket(sock, BUFSIZE, &receivedBuf);
+    if (is_timed_out) return true;
+    
+    Packet_ptr part_packet = unpack_packet((unsigned char*)receivedBuf);
+    // mod status by 10, if 2, push it to allfilenames, if not 2, push it to onefilecontents
+    if (part_packet->packet_status / 10 == curr_file_index) {
+        /* check if packets belongs to current file */
+        if (part_packet->packet_status % 10 == FILENAME_P){
+            /* TODO make sure null character are placed at the content end */
+            strcpy(filename, (const char*) part_packet->content);
+            printf("RECV one file name \n");
+            all_File_names.push_back(string(filename));
+            cout << "The file we read is: "<< filename << endl;
+        } else if (part_packet->packet_status % 10 == LAST_PACK){
+            endpacketfound = true;
+            maximum_packets = part_packet->seqNum + 1;
+            cerr << "LAST packet recv\n";
+            one_file_contents[part_packet->seqNum] = part_packet;
+        } else{
+            cerr << "REGULAR packet recv\n";
+            auto it = one_file_contents.find(part_packet->seqNum);
+            if (it == one_file_contents.end()){
+                one_file_contents[part_packet->seqNum] = part_packet;
+            }
+        } 
+    }
+    
+    return is_timed_out;
+}
+
+
+void 
+write_missing_packets(C150DgmSocket& sock, vector<size_t>& missing_packets)
+{
+    cerr << "MISSING: write back to client!\n";
+    Packet_ptr missing_notice = (Packet_ptr)malloc(sizeof(struct Packet));
+    for (auto& packet: missing_packets) {
+        cerr << "MISSING " << packet << endl;
+        missing_notice->seqNum = packet + 1;
+        missing_notice->packet_status = MISS_FILE;
+        sock.write((const char*)missing_notice, sizeof(struct Packet));
+        bzero(missing_notice, sizeof(struct Packet));
+    } 
 }
 
 
 
 
-/* * * * * *  * * * * * * * * * *  NETWORK SERVER FUNCTIONS  * * * * * * * * * * * * * * * */
-void 
-FileReceiveE2ECheck(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles)
+bool 
+recv_one_file(C150DgmSocket& sock, size_t curr_file_index, vector<string> all_file_names, unordered_map<size_t, Packet_ptr>& one_file_contents)
 {
-    *GRADING << "Begining to receive whole files from client." << endl; 
-    while (1){
-        if (readfromSrc(sock, allArrivedFiles)) break;
+    clock_t start_t, end_t;
+    start_t = clock();
+    // char filename[256];
+    bool endpacketfound = false;
+    bool is_timed_out = false, recv_complete = false;
+    size_t maximum_packets;
+    while (1) {
+        is_timed_out = read_one_packet(sock, curr_file_index, endpacketfound, maximum_packets, one_file_contents, all_file_names); 
+        end_t = clock();
+        if ((double(end_t - start_t) / CLOCKS_PER_SEC) > 30){ /* maximum 10 minutes span for retry */
+            printf("have waiting over 30 seconds\n");
+            break; }
+        if (is_timed_out){
+            if (!endpacketfound) {
+                // TODO send to client resent end packet 
+                printf("MISS: end packet was not received \n");
+                Packet_ptr missing_notice = (Packet_ptr) calloc(sizeof(struct Packet), 1);
+                missing_notice->packet_status = LAST_PACK;
+                sock.write((const char*)missing_notice, sizeof(struct Packet));
+                free(missing_notice);
+                cout << "successfully send request for last packet\n";
+            } else {
+                vector<size_t> missing_packets_seq;
+                if (check_completeness(sock, one_file_contents, maximum_packets, missing_packets_seq)) {
+                    recv_complete = true;
+                    break;} 
+                write_missing_packets(sock, missing_packets_seq);
+            }
+        }
     }
-    *GRADING << "Received and successfully read a total of " << allArrivedFiles.size() << " files from client." << endl;
+    resend_confirmation(sock, curr_file_index);
+    return recv_complete;
+}
+
+
+void
+resend_confirmation(C150DgmSocket& sock, size_t curr_file_index){
+    Packet_ptr complete_notice = (Packet_ptr)calloc(sizeof(struct Packet), 1);
+    complete_notice->packet_status = COMPLETE;
+    bool good_to_go = false;
+    char *receivedBuf = (char *)malloc(sizeof(struct Packet));
+    while(!good_to_go) {
+        sock.write((const char*)complete_notice, sizeof(struct Packet));
+        cerr << "START RESEND loop\n";
+        bzero(receivedBuf, sizeof(struct Packet));
+        bool succ_read = readSizefromSocket(sock, BUFSIZE, &receivedBuf);
+        if (!succ_read){
+            complete_notice = unpack_packet((unsigned char*)receivedBuf);
+            if (complete_notice->packet_status / 10 > curr_file_index){
+                good_to_go = true;
+            }
+        }
+    }
 }
 
 /* readSizefromSocket 
@@ -97,188 +231,32 @@ readSizefromSocket(C150DgmSocket& sock, size_t bytestoRead, char** bytes_storage
     bzero((*bytes_storage), bytestoRead);
     sock.read((*bytes_storage), bytestoRead);
     /* evaluate conditions to send ACK or REJ */
-    if (sock.timedout()){ 
-        sock.write(REJ, strlen(REJ));
-        return false;
+    if (sock.timedout()) { 
+        return true;
     }
-    sock.write(ACK, strlen(ACK));
-    return true;
-    
+    return false;
 }
 
-/* compareSHA1 
- * purpose: compare the receivedSHA1 and calculatedSHA1 byte by byte 
- * parameter: 
- * return: True if every byte match, False if any byte does not match
- */
-bool 
-compareSHA1(unsigned char* receivedSHA1, unsigned char* calculateSHA1)
+
+
+// sequence number represent the order of packets in file
+Packet_ptr 
+unpack_packet(unsigned char *receivedBuf)
 {
-    for (int j = 0; j < 20; j++) {
-        if (receivedSHA1[j] != calculateSHA1[j])
-            return false;
-    }
-    return true;
-
-}
-
-/* readContentfromSocket 
- * purpose: read the incoming packets that represent content from server socket
- * parameter: 
- *     C150DgmSocket& sock: reference to socket object
- *     size_t contentSize: total bytes to read from the content
- *     unsigned char** read_result_addr: address of pointer to the finally read bytes
- * return: True if no timeout and signalize continuation of program, False if timeout 
- *          and this iteration terminates. 
- * notes: none
-*/
-bool
-readContentfromSocket(C150DgmSocket& sock, int contentlen, unsigned char** read_result_addr)
-{
-    vector<unsigned char> allFileContent; /* dynamically expanded memory for all content bytes */
-    ssize_t totalBytes = 0;
-    ssize_t chunk = 0;
-    ssize_t curBytes = 0;
-    unsigned char* temporaryBuf = (unsigned char*)malloc(contentlen * sizeof(unsigned char));
-    int readtimes = 0;
-    while(totalBytes != contentlen) { /* read until all bytes from sockets are received */
-        if (readtimes == 10){
-            unsigned char* temp = (unsigned char*)malloc(curBytes * sizeof(unsigned char));
-            bzero(temp, curBytes); /* zero out the field */
-            int index = 0;
-            for (unsigned int i = totalBytes - curBytes; i < totalBytes; i++) {
-                *(temp + index) = allFileContent.at(i); 
-                index++;
-            }
-            unsigned char *pobuf = (unsigned char*) malloc(SHA_MSG * sizeof(unsigned char));
-            SHA1((const unsigned char*)temp, curBytes, pobuf);
-            char *partialSHA1 = (char*)malloc(SHA_MSG * sizeof(char));
-            if (!readSizefromSocket(sock, SHA_MSG, &partialSHA1)){
-                return false;
-            } 
-            unsigned char *partialSHA1dup = (unsigned char*)malloc(SHA_MSG * sizeof(unsigned char)); 
-            bzero(partialSHA1dup, 20);
-            for (int j = 0; j < 20; j++){ 
-                partialSHA1dup[j] = (unsigned char)partialSHA1[j];
-            }
-            if (!compareSHA1(pobuf, partialSHA1dup)) {
-                *GRADING << "The received <" << "> bytes SHA1 do not match, requesting resend." << endl;
-                sock.write(REJ, strlen(REJ));
-                return false;
-            } else {
-                sock.write(ACK, strlen(ACK));
-            }
-            readtimes = 0;
-            curBytes = 0;
-            free(temp);
-            free(pobuf);
-            free(partialSHA1);
-            free(partialSHA1dup);
-        }
-        chunk = sock.read((char *)temporaryBuf, BUFSIZE);
-        for (ssize_t t = 0; t < chunk; t += sizeof(unsigned char)) {
-            /* put read bytes into dynamically expanding memories */
-            allFileContent.push_back(*(temporaryBuf + t)); }
-        bzero(temporaryBuf, chunk); /* clean up the buf for next read */  
-        curBytes += chunk;
-        totalBytes += chunk;
-        readtimes++;
-        if (sock.timedout()){
-            printf("oops timed out.\n");
-            sock.write(REJ, strlen(REJ));
-            return false;
-        }
-    }
-    /* evaluate conditions to send ACK */
-    if (!sock.timedout()){ /* confirm entire read for content */
-        sock.write(ACK, strlen(ACK));
-    }else{
-        sock.write(REJ, strlen(REJ));
-        return false;
-    }
-    /* compare total received bytes with received contentlen field */
-    if (totalBytes == contentlen){
-        sock.write(ACK, strlen(ACK));
-    } else {
-        sock.write(REJ, strlen(REJ));
-        return false;
-    }
-
-    /* calculate SHA1 of the received content bytes */
-    unsigned char* prod = (unsigned char*)malloc((allFileContent.size())*sizeof(unsigned char));
-    bzero(prod, allFileContent.size()); /* zero out the field */
-    for (unsigned int i = 0; i < allFileContent.size(); i ++) {
-        *(prod + i) = allFileContent.at(i); 
-    }
-    *read_result_addr = prod;
-    return true;
-}
-
-/* readfromSrc 
- * purpose: read any incoming packets in order from the server socket 
- * parameter: 
- *     C150DgmSocket& sock: reference to socket object 
- * return: True if the socket have received the last packet in the 
- *          network stream, False if the socket is expecting more
- *          packets in the next read 
- * notes: none  
- */
-bool
-readfromSrc(C150DgmSocket& sock, vector<fileProp>& allArrivedFiles)
-{
-    /* 1ACK-receive fileheader from client */
-    unsigned char *fileHeader = (unsigned char*)malloc(sizeof(struct header_info));
-    struct fileProp *fileInfo = (struct fileProp *)malloc(sizeof(struct fileProp));
-    bzero(fileHeader, sizeof(struct header_info));
-    sock.read((char*)fileHeader, sizeof(struct header_info));
-    cout << "error after line 383 " << endl;
-    /* evaluate conditions to send ACK or REJ */
-    if (sock.timedout()){ 
-        cerr << "timed out error in write" << endl;
-        sock.write(REJ, strlen(REJ));
-        return false;
-    }
-    /*1ACK-receive header information and correct filenameSHA1 */
-    if (parseHeaderField(fileHeader, *fileInfo))
-    {
-        sock.write(ACK, strlen(ACK));
-    }else{
-        sock.write(REJ, strlen(REJ));
-        return false;
-    }
-
-    /* 2ACK-receive content from client */
-    /* many ACKs for receiving contents in packets and with correct SHA1 */
-    int contentlen = fileInfo->contentSize;
-    unsigned char* prod = nullptr;
-    if (!readContentfromSocket(sock, contentlen, &prod)){
-        /* unsuccessful read of the entire content */
-        *GRADING << "File: <" << fileInfo->filename << "> failed at socket to socket check for failing to receive contents from client." << endl;
-        free(prod);
-        return false;
-    }
-    *GRADING << "File: <" << fileInfo->filename << "> succeed at socket to socket check with receiving the entire content." << endl;
-    unsigned char *obuf = (unsigned char*)malloc(SHA_MSG * sizeof(unsigned char));
-    SHA1((const unsigned char *)prod, contentlen, obuf);
-
-    /*9ACK-check consistency in received and calculated SHA1 to client */
-    if (!compareSHA1(obuf, fileInfo->fileSHA1)) {
-        sock.write(REJ, strlen(REJ));
-        *GRADING << "File: <" << fileInfo->filename << "> socket to socket failed at inconsistency in received and calculated content SHA1." << endl;
-        return false;
-    }
-    sock.write(ACK, strlen(ACK)); /* log for purpose of recording failure caused by network nastiness */
-    *GRADING << "File: <" << fileInfo->filename << ">  succeed at socket to socket check with consistency in size and SHA1 of the content." << endl;
-    fileInfo->contentbuf = prod;
-    allArrivedFiles.push_back(*fileInfo);
-    free(obuf);
-    free(prod);
-    *GRADING << "File: <" << fileInfo->filename << "> socket to socket end-to-end check succeeded." << endl;
-    return true;
+    Packet_ptr curr_packet = (Packet_ptr)malloc(sizeof(struct Packet));
+    bzero(curr_packet, sizeof(struct Packet));
+    /* cast one packet to better understand it */
+    memcpy((void *)curr_packet, (void *)receivedBuf, BUFSIZE);
+    cerr << "UNPACK seq [" << curr_packet->seqNum << "] \n";
+    cerr << "UNPACK packetStatus [" << curr_packet->packet_status << "] \n";
+    return curr_packet;
 }
 
 
-/* Helper function for viewing SHA1 */
+
+
+
+// /* Helper function for viewing SHA1 */
 void 
 printSHA1(unsigned char *partialSHA1dup)
 {

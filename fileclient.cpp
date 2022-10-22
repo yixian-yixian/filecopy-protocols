@@ -100,17 +100,6 @@ int main(int argc, char *argv[]) {
     networknastiness = atoi(argv[netnastyArg]);
     string srcdir = argv[srcdirArg];
 
-    // end to end check from local to socket
-    vector<string> filenames;
-    GetFileNames(filenames, srcdir);
-    vector<fileProp> allFilesProp;
-    *GRADING << "Starting FileCopyE2ECheck\n";
-    FileCopyE2ECheck(filenastiness, srcdir, allFilesProp, filenames);
-    // for (long unsigned int index = 0; index < allFilesProp.size(); index++){
-    //     unsigned char* address;
-    //     formatRequestBuf(allFilesProp.at(index), &address);
-    // }
-    *GRADING << "Finished FileCopyE2ECheck\n";
 
     // end to end check from socket to socket
     try {
@@ -119,16 +108,26 @@ int main(int argc, char *argv[]) {
 
         // Tell the DGMSocket which server to talk to
         sock -> setServerName(argv[serverArg]);
-        sock -> turnOnTimeouts(5000);
+        sock -> turnOnTimeouts(10000);
+
+        // end to end check from local to socket
+        vector<string> filenames;
+        GetFileNames(filenames, srcdir);
+        vector<fileProp> allFilesProp;
+        *GRADING << "Starting FileCopyE2ECheck\n";
+        FileCopyE2ECheck(filenastiness, srcdir, allFilesProp, filenames);
+        cout << "Copied [" << allFilesProp.size() << "] in this directory" << endl;
+        *GRADING << "Finished FileCopyE2ECheck\n";
 
         // network e2e check
+        Packet_ptr startMsg = (Packet_ptr)calloc(sizeof(struct Packet), 1);
+        startMsg->packet_status = FILENAME_P;
+        sock->write((const char*)startMsg, sizeof(struct Packet));
+        free(startMsg);
         FileSendE2ECheck(*sock, allFilesProp, filenames);
     }
-    //
     //  Handle networking errors -- for now, just print message and give up!
-    //
     catch (C150NetworkException& e) {
-        // In case we're logging to a file, write to the console too
         cerr << argv[0] << ": caught C150NetworkException: " << e.formattedExplanation() << endl;
     }
     return 0;

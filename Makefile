@@ -49,13 +49,13 @@ all: nastyfiletest makedatafile sha1test fileclient fileserver
 # Build the fileserver
 #
 fileserver: fileserver.cpp $(C150AR) $(INCLUDES)
-	$(CPP) -o fileserver $(CPPFLAGS) localendtoend.cpp networkendtoend.cpp fileserver.cpp  $(C150AR) $(LDFLAGS)
+	$(CPP) -o fileserver $(CPPFLAGS) localendtoend.cpp servernetwork.cpp fileserver.cpp  $(C150AR) $(LDFLAGS)
 
 #
 # Build the fileclient
 #
 fileclient: fileclient.cpp $(C150AR) $(INCLUDES)
-	$(CPP) -o fileclient $(CPPFLAGS) localendtoend.cpp networkendtoend.cpp fileclient.cpp $(C150AR) $(LDFLAGS)
+	$(CPP) -o fileclient $(CPPFLAGS) localendtoend.cpp clientnetwork.cpp fileclient.cpp $(C150AR) $(LDFLAGS)
 
 #
 # Build the nastyfiletest sample

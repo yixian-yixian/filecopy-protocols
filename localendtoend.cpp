@@ -59,6 +59,14 @@ renameFileName(string name){
     return ss.str();  // return dir/name
 }
 
+/* pack_status 
+ * purpose: 
+s*/
+uint32_t pack_status(unsigned int index_dir, int status)
+{
+    return (index_dir * 10 + status);
+}
+
 /* GetFileName 
  * purpose: read in all name strings of available files in the target directory 
  * return: none 
@@ -121,18 +129,24 @@ ReadAPacket(C150NETWORK::C150NastyFile& targetFile, Packet_ptr currPacket, size_
  * return: total number of bytes read from the file object
  * notes: *buf_ptr is udpated to point to the read in file content       
  */
-size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& allFileContent, string srcFileName)
+size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& allFileContent, string srcFileName, unsigned int fileindex)
 {
     size_t readedBytes = 0, curr_seq = 0, totalBytes = 0;
+    Packet_ptr namePacket = (Packet_ptr)calloc(sizeof(struct Packet), 1);
+    namePacket->packet_status = pack_status(fileindex, 2);
+    strncpy((char *)namePacket->content, srcFileName.c_str(), srcFileName.size());
+    namePacket->seqNum = srcFileName.size();
+    allFileContent.push_back(namePacket);
+
     while(1) { // read until the end
         /* initialize a packet for next read */
-        Packet_ptr currPacket = (Packet_ptr)malloc(sizeof(struct Packet));
+        Packet_ptr currPacket = (Packet_ptr)calloc(sizeof(struct Packet), 1);
         /* read a packet */
         readedBytes = ReadAPacket(targetFile, currPacket, curr_seq, srcFileName);
         totalBytes += readedBytes;
         /* increment sequence number by 1 */
         curr_seq++;
-        currPacket->packet_status = (readedBytes < BUFSIZE) ? 1 : 0;
+        currPacket->packet_status = (readedBytes < BUFSIZE) ? pack_status(fileindex, LAST_PACK) : pack_status(fileindex, REG_PACK);
         /* place one pack onto all file vector */
         allFileContent.push_back(currPacket);
         if (readedBytes < BUFSIZE) {
@@ -162,16 +176,16 @@ void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFil
         C150NETWORK::C150NastyFile C150NF = C150NETWORK::C150NastyFile(filenastiness);
         string sourceFileName = makeFileName(srcdir, filenames[i]);
         vector<Packet_ptr> *singleFilePkt = new vector<Packet_ptr>;
-        readedBytes = ReadaFile(C150NF, *singleFilePkt, sourceFileName);
+        readedBytes = ReadaFile(C150NF, *singleFilePkt, sourceFileName, i);
         temporaryBuf = (unsigned char*) calloc((readedBytes + 1), sizeof(unsigned char));
-        for (long unsigned int index = 0; index < singleFilePkt->size() - 1; index++){
+        for (long unsigned int index = 1; index < singleFilePkt->size() - 1; index++){
             /* copy over bytes in each packet except for last packet */
-            strncat((char *) temporaryBuf, (char *) singleFilePkt->at(index)->content, BUFSIZE);
+            strncat((char*) temporaryBuf, (char*) singleFilePkt->at(index)->content, BUFSIZE);
         }/* copy last packet */
-        size_t lastbytes = readedBytes - (singleFilePkt->size() - 1) * BUFSIZE;
+        size_t lastbytes = readedBytes - (singleFilePkt->size() - 2) * BUFSIZE;
         strncat((char*)temporaryBuf, (char *)((singleFilePkt->at(singleFilePkt->size() - 1))->content), lastbytes);
         /* calculate SHA1 for the entire file */
-        calcSHA1(&entirefile_sha1, temporaryBuf, readedBytes);
+        calcSHA1(&entirefile_sha1, temporaryBuf, readedBytes); 
         /* initialize fileProp object based on the current filename, content and totalBytes read */
         struct fileProp fileInfo = fileProp(filenames[i], entirefile_sha1, readedBytes, singleFilePkt);
         allFilesProp_addr.push_back(fileInfo); /* append file informationto the list */
@@ -239,6 +253,7 @@ void calcSHA1(unsigned char** sha1_val, unsigned char *content, ssize_t contentS
     *sha1_val = (unsigned char*)malloc(20 * sizeof(unsigned char));
     SHA1((unsigned char*)content, contentSize, *sha1_val);
 }
+
 
 
 
