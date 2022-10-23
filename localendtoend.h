@@ -61,11 +61,12 @@ typedef struct fileProp{
 void GetFileNames(vector<string>& filenames, string tardir);
 void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFilesProp_addr, vector<string>& filenames);
 string makeFileName(string dir, string name);
-void WriteaFile(fileProp& curFile, int filenastiness, string tardir);
 size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& allFileContent, unsigned int fileindex, string trueFilename);
 size_t ReadAPacket(C150NETWORK::C150NastyFile& targetFile, Packet_ptr currPacket, size_t& seqNum, string srcFileName);
 uint32_t pack_status(unsigned int index_dir, int status);
-
+void WriteaFile(C150NETWORK::C150NastyFile& targetFile, unordered_map<size_t, Packet_ptr>& curr_file_contents, string target_file_name, size_t left_over_bytes);
+void RenameAllFiles(string tardir);
+string makeTmpFileName(string dir, string name);
 #endif
 
 

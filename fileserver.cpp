@@ -97,43 +97,6 @@ main(int argc, char *argv[])
         vector<fileProp> allArrivedFiles;
         FileReceiveE2ECheck(*sock, filenastiness, tarDir);
 
-        // bool currentfilefail = false;
-        // unordered_map<string, fileProp*> TargetFiles;
-        // vector<string> filenames;
-        // vector<fileProp> allReadinFiles;
-        // GetFileNames(filenames, tarDir);
-        // FileCopyE2ECheck(filenastiness, tarDir, allReadinFiles, filenames);
-        // for (long unsigned int i = 0; i < filenames.size(); i++)
-        // {
-        //     string filename = filenames.at(i);
-        //     TargetFiles[filename] = &(allReadinFiles.at(i));
-        // }
-
-        // long unsigned int index = 0;
-        // while (index < allArrivedFiles.size()){
-        //     currentfilefail = false;
-        //     string curfilename = allArrivedFiles.at(index).filename;
-        //     *GRADING << "File: <" << curfilename << "> received, beginning end-to-end check." << endl;
-        //     unordered_map<string, fileProp*>::const_iterator got = TargetFiles.find(curfilename);
-        //     if (got == TargetFiles.end()) {
-        //         *GRADING << "File: <" << curfilename << "> was not found in the target directory." << endl;
-        //         *GRADING << "File: <" << curfilename << "> end-to-end check failed." << endl;
-        //     }else{
-        //         for (int j = 0; j < 20; j++) {
-        //             if (TargetFiles[curfilename]->fileSHA1[j] != allArrivedFiles.at(index).fileSHA1[j]){
-        //                 *GRADING << "File: <" << curfilename << "> end-to-end check failed." << endl;
-        //                 currentfilefail = true;
-        //                 break;
-        //             }
-        //         }
-        //     }
-        //     if (!currentfilefail) {
-        //         *GRADING << "File: <" << curfilename << "> end-to-end check succeeded." << endl;
-        //     }
-        //     index++;
-        // }
-        // printf("MISSION COMPLETE!\n");
-        // *GRADING << "Complete a total of <"  << allArrivedFiles.size() << "> files end-to-end check." << endl;
     } 
     catch (C150NetworkException& e){
         // In case we're logging to a file, write to the console too

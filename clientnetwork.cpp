@@ -51,14 +51,14 @@ ServerRESCheck(C150DgmSocket& sock, vector<Packet_ptr>* curFileCont, unsigned in
         memcpy((void *)pktRes, response, sizeof(struct Packet));
         free(response);
         if (pktRes->packet_status == LAST_PACK){
-            sock.write((const char*) (curFileCont->at(curFileCont->size()-1)), sizeof(struct Packet));
+            sock.write((const char*) (curFileCont->at(curFileCont->size()-2)), sizeof(struct Packet));
             return false;
         }else if (pktRes->packet_status == MISS_FILE){
             size_t missingIndex = pktRes->seqNum;
-            sock.write((const char*) (curFileCont->at(missingIndex)), sizeof(struct Packet));
+            sock.write((const char*) (curFileCont->at(missingIndex - 1)), sizeof(struct Packet));
             return false;
         }else if (pktRes->packet_status == FILENAME_P){
-            sock.write((const char*) (curFileCont->at(0)), sizeof(struct Packet));
+            sock.write((const char*) (curFileCont->at(curFileCont->size()-1)), sizeof(struct Packet));
             return false;
         }else if (pktRes->packet_status / 10 == curFileIndex && pktRes->packet_status % 10 == COMPLETE){
             return true;

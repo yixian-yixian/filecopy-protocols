@@ -30,7 +30,6 @@ makeFileName(string dir, string name) {
     ss << '/';
   ss << name;       // append file name to dir
   return ss.str();  // return dir/name
-  
 }
 
 string
@@ -40,13 +39,11 @@ makeTmpFileName(string dir, string name){
     // make sure dir name ends in /
     if (dir.substr(dir.length()-1,1) != "/")
         ss << '/';
-    // size_t pos = name.find_last_of(".");
-    // if (pos != string::npos){ 
-    //     ss << name.substr(0, pos);
-    // }
     ss << name << ".tmp";   
     return ss.str();  // return dir/name
 }
+
+
 
 string
 renameFileName(string name){
@@ -102,7 +99,6 @@ ReadAPacket(C150NETWORK::C150NastyFile& targetFile, Packet_ptr currPacket, size_
         /* calculate packet SHA1 */
         unsigned char packetSHA1[SHASIZE];
         SHA1(temporaryBuf, chunk_size, packetSHA1);
-        // printSHA1(packetSHA1);
         /* check for repetitive SHA1 */
         unordered_map<unsigned char*, unsigned char*>::const_iterator found = packet_sha1.find(packetSHA1);
         if (found == packet_sha1.end()) { /* did not find matching SHA1, add to map and reread */
@@ -117,7 +113,6 @@ ReadAPacket(C150NETWORK::C150NastyFile& targetFile, Packet_ptr currPacket, size_
             strncpy((char *)currPacket->content, (char *)temporaryBuf, chunk_size);
             find_identical = true;  
             free(temporaryBuf);
-            // cerr << "found \n" << endl;
         }
         targetFile.fclose();
     }
@@ -132,12 +127,7 @@ ReadAPacket(C150NETWORK::C150NastyFile& targetFile, Packet_ptr currPacket, size_
 size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& allFileContent, string srcFileName, unsigned int fileindex, string trueFilename, uint32_t totalFileNum)
 {
     size_t readedBytes = 0, curr_seq = 0, totalBytes = 0;
-    Packet_ptr namePacket = (Packet_ptr)calloc(sizeof(struct Packet), 1);
-    namePacket->packet_status = pack_status(fileindex, 2);
-    strncpy((char *)namePacket->content, trueFilename.c_str(), trueFilename.size());
-    namePacket->seqNum = trueFilename.size();
-    namePacket->totalFileNum = totalFileNum;
-    allFileContent.push_back(namePacket);
+    uint32_t lastPktSize = 1;
 
     while(1) { // read until the end
         /* initialize a packet for next read */
@@ -145,6 +135,9 @@ size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& all
         currPacket->totalFileNum = totalFileNum;
         /* read a packet */
         readedBytes = ReadAPacket(targetFile, currPacket, curr_seq, srcFileName);
+        if (readedBytes < BUFSIZE) { 
+            lastPktSize = readedBytes;
+        }
         totalBytes += readedBytes;
         /* increment sequence number by 1 */
         curr_seq++;
@@ -152,10 +145,17 @@ size_t ReadaFile(C150NETWORK::C150NastyFile& targetFile, vector<Packet_ptr>& all
         /* place one pack onto all file vector */
         allFileContent.push_back(currPacket);
         if (readedBytes < BUFSIZE) {
-            cerr << "totalbytes after one iteration [" << totalBytes << "] \n";
             break;
         }
     }
+
+    Packet_ptr namePacket = (Packet_ptr)calloc(sizeof(struct Packet), 1);
+    namePacket->packet_status = pack_status(fileindex, 2);
+    strncpy((char *)namePacket->content, trueFilename.c_str(), trueFilename.size());
+    namePacket->seqNum = trueFilename.size();
+    namePacket->totalFileNum = lastPktSize;
+    allFileContent.push_back(namePacket);
+
     return totalBytes;
 }
 
@@ -195,42 +195,56 @@ void FileCopyE2ECheck(int filenastiness, string srcdir, vector<fileProp>& allFil
     }
 }
 
+bool
+Write_a_packet(C150NETWORK::C150NastyFile& targetFile, unordered_map<size_t, Packet_ptr>& curr_file_contents, size_t curr_seq, size_t curr_packet_size)
+{
+    size_t chunk_size = 0;
+    unordered_map<unsigned char *, unsigned char*> packet_sha1;
+    auto curr_write_out = curr_file_contents.find(curr_seq);
+    int total_iteration = 0;
+    bool find_identical = false;
+    /* write a packet out to file stream */
+    chunk_size = targetFile.fwrite((const void*)(curr_write_out->second->content), 1, curr_packet_size);
+    unsigned char *temporaryBuf = (unsigned char*) malloc(sizeof(unsigned char) * curr_packet_size);
+    while (total_iteration < 20 && !find_identical) {
+        /* read a packet */
+        chunk_size = targetFile.fread(temporaryBuf, 1, chunk_size);
+        /* calculate packet SHA1 */
+        unsigned char packetSHA1[SHASIZE];
+        SHA1(temporaryBuf, chunk_size, packetSHA1);
+        /* check for repetitive SHA1 */
+        auto found = packet_sha1.find(packetSHA1);
+        if (found == packet_sha1.end()) { /* did not find matching SHA1, add to map and reread */
+            /* add unseen SHA1 into map */
+            packet_sha1[packetSHA1] = temporaryBuf;
+            bzero(packetSHA1, SHASIZE);
+            bzero(temporaryBuf, chunk_size);
+            /* reset the filepointer to last read position for reread */
+            targetFile.fseek(curr_seq * chunk_size, SEEK_SET);
+        } else { /* found matching SHA1, write it out to the file system */
+            find_identical = true;  
+            free(temporaryBuf);
+        }
+        total_iteration++;
+    }
+    return find_identical;
+
+}
 
 void 
-WriteaFile(fileProp& curFile, int filenastiness, string tardir) {
-    // struct stat dir_status = {0};
-    // if (stat(tardir.c_str(), &dir_status) == -1) {
-    //     mkdir(tardir.c_str(), 0700);
-    // }
-    // /* make target directory file name */
-    // string target_file_name = makeTmpFileName(tardir, curFile.filename);
-    // C150NETWORK::C150NastyFile C150NF = C150NETWORK::C150NastyFile(filenastiness);
-    // /* variables to track read and write correctness */
-    // unsigned char *read_back_Buf = nullptr, *file_sha1 = nullptr;
-    // bool is_matched_content = false;
-    // ssize_t read_back_size;
-    // while (!is_matched_content) {
-    //     /* open the file to write */
-    //     void *success = C150NF.fopen(target_file_name.c_str(), "w");
-    //     assert(success != NULL);
-    //     C150NastyFile C150NFR = C150NastyFile(0);
-    //     /* write the file out to file system */
-    //     C150NF.fwrite((const void*)(curFile.contentbuf), 1, curFile.contentSize);
-    //     C150NF.fclose();
-        
-    //     /* read the file back for SHA1 comparison */
-    //     void *tmpfile = C150NFR.fopen(target_file_name.c_str(), "r");
-    //     assert(tmpfile != NULL);
-    //     read_back_size = ReadaFile(C150NFR, &read_back_Buf);
-    //     calcSHA1(&file_sha1, read_back_Buf, read_back_size);
-    //     if (strcmp((char *)file_sha1, (char *)curFile.fileSHA1) == 0) {
-    //         /* matching content leads to exit */
-    //         is_matched_content = true;
-    //     }
-    //     free(read_back_Buf);
-    //     free(file_sha1);
-    //     C150NFR.fclose();
-    // }
+WriteaFile(C150NETWORK::C150NastyFile& targetFile, unordered_map<size_t, Packet_ptr>& curr_file_contents, string target_file_name, size_t left_over_bytes) {
+    /* make target directory file name */
+    /* variables to track read and write correctness */
+    size_t total_packets = curr_file_contents.size();
+    size_t total_bytes_write;
+    targetFile.fopen(target_file_name.c_str(), "a+");
+    long unsigned int index = 0;
+    while (index < total_packets){
+        total_bytes_write = (index == total_packets - 1 ) ? left_over_bytes : 490;
+        Write_a_packet(targetFile, curr_file_contents, index, total_bytes_write);
+        index++;
+    }
+    targetFile.fclose();
 }
 
 void 
@@ -241,10 +255,10 @@ RenameAllFiles(string tardir)
     dp = opendir(tardir.c_str());
     if (dp != nullptr) {
         while ((entry = readdir(dp))){
-            if (entry->d_type == 8){
-                string newname = renameFileName(entry->d_name);
-                rename(entry->d_name, newname.c_str());
-            }
+            cout << entry->d_name << " ";
+            string newname = makeFileName(tardir, renameFileName(entry->d_name));
+            cout << newname << endl;
+            rename((makeFileName(tardir, entry->d_name)).c_str(), newname.c_str());
         }
     }
     closedir(dp);
